@@ -203,6 +203,49 @@ class VectorStore:
             self.delete_terms(keys)
         return len(keys)
 
+    # --- enumeration & keyed reads ---
+
+    def list_vectors(
+        self, *, max_results: int = 500, next_token: str | None = None
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """List vectors (with metadata) in storage order. Does not filter by metadata."""
+        request: dict[str, Any] = {
+            "vectorBucketName": self.bucket,
+            "indexName": self.index,
+            "maxResults": max_results,
+            "returnMetadata": True,
+        }
+        if next_token:
+            request["nextToken"] = next_token
+        response = self._client.list_vectors(**request)
+        return list(response.get("vectors", [])), response.get("nextToken")
+
+    def list_all_vectors(self, *, page_size: int = 500) -> list[dict[str, Any]]:
+        """Drain every vector in the index with its metadata."""
+        out: list[dict[str, Any]] = []
+        token: str | None = None
+        while True:
+            items, token = self.list_vectors(max_results=page_size, next_token=token)
+            out.extend(items)
+            if not token:
+                return out
+
+    def get_vectors(self, keys: Sequence[str], *, batch_size: int = 100) -> list[dict[str, Any]]:
+        """Fetch full vectors (with metadata) by key, in batches."""
+        out: list[dict[str, Any]] = []
+        for start in range(0, len(keys), batch_size):
+            chunk = list(keys[start : start + batch_size])
+            if not chunk:
+                continue
+            response = self._client.get_vectors(
+                vectorBucketName=self.bucket,
+                indexName=self.index,
+                keys=chunk,
+                returnMetadata=True,
+            )
+            out.extend(response.get("vectors", []))
+        return out
+
     # --- reads ---
 
     def query(

@@ -85,6 +85,41 @@ async fn stats() -> Result<Value, String> {
     call_api(reqwest::Method::GET, "/v1/stats", None).await
 }
 
+// --- decks & retention (passthrough to the Python API) ---
+
+#[tauri::command]
+async fn list_decks() -> Result<Value, String> {
+    call_api(reqwest::Method::GET, "/v1/decks", None).await
+}
+
+#[tauri::command]
+async fn start_deck(request: Value) -> Result<Value, String> {
+    call_api(reqwest::Method::POST, "/v1/deck/start", Some(request)).await
+}
+
+#[tauri::command]
+async fn review_due(limit: i64) -> Result<Value, String> {
+    let path = format!("/v1/review/due?limit={limit}");
+    call_api(reqwest::Method::GET, &path, None).await
+}
+
+#[tauri::command]
+async fn quiz(request: Value) -> Result<Value, String> {
+    let domain = request.get("domain").and_then(Value::as_str).unwrap_or("");
+    let tier = request
+        .get("difficulty_tier")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let count = request.get("count").and_then(Value::as_i64).unwrap_or(10);
+    let path = format!("/v1/quiz?domain={domain}&difficulty_tier={tier}&count={count}");
+    call_api(reqwest::Method::GET, &path, None).await
+}
+
+#[tauri::command]
+async fn grade_quiz(request: Value) -> Result<Value, String> {
+    call_api(reqwest::Method::POST, "/v1/quiz/grade", Some(request)).await
+}
+
 #[tauri::command]
 fn store_token(token: String) {
     if let Ok(mut cache) = TOKEN.lock() {
@@ -279,6 +314,11 @@ pub fn run() {
             auth_logout,
             auth_status,
             auth_restore,
+            list_decks,
+            start_deck,
+            review_due,
+            quiz,
+            grade_quiz,
             cached_progress,
             sync_progress,
             local_review,

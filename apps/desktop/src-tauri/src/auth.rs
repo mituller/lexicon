@@ -294,6 +294,19 @@ pub async fn refresh(refresh_token: &str) -> Result<Tokens, String> {
 ///
 /// Used only to key *local* storage (keychain account name / SQLite user). The server always
 /// re-verifies the token, so this is not a trust decision.
+pub fn sub_from_id_token(token: &str) -> Option<String> {
+    let payload = token.split('.').nth(1)?;
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload)
+        .or_else(|_| URL_SAFE.decode(payload))
+        .ok()?;
+    let claims: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
+    claims
+        .get("sub")
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,9 +317,8 @@ mod tests {
         let server = bind_loopback(port).expect("bind should succeed");
 
         let handle = std::thread::spawn(move || {
-            for request in server.incoming_requests() {
+            if let Some(request) = server.incoming_requests().next() {
                 let _ = request.respond(tiny_http::Response::from_string("ok-lexicon"));
-                break;
             }
         });
 
@@ -321,17 +333,4 @@ mod tests {
         assert!(body.contains("ok-lexicon"), "unexpected response: {body}");
         handle.join().unwrap();
     }
-}
-
-pub fn sub_from_id_token(token: &str) -> Option<String> {
-    let payload = token.split('.').nth(1)?;
-    let decoded = URL_SAFE_NO_PAD
-        .decode(payload)
-        .or_else(|_| URL_SAFE.decode(payload))
-        .ok()?;
-    let claims: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
-    claims
-        .get("sub")
-        .and_then(|value| value.as_str())
-        .map(str::to_string)
 }

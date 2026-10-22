@@ -68,3 +68,37 @@ export interface ProgressUpdate {
   note?: string;
   starred?: boolean;
 }
+
+export interface DeckSummary {
+  domain: string;
+  difficulty_tier: string;
+  count: number;
+  cefr_levels: string[];
+}
+
+export interface DueTerm {
+  term_id: string;
+  term: string;
+  definition: string;
+  example?: string;
+  synonyms?: string[];
+  domain?: string;
+  difficulty_tier?: string;
+  cefr_level?: string;
+  state?: string;
+  reps?: number;
+  stability?: number;
+}
+
+export interface QuizQuestion {
+  term_id: string;
+  term: string;
+  options: string[];
+  answer_index: number;
+}
+
+export interface Quiz {
+  domain: string;
+  difficulty_tier: string;
+  questions: QuizQuestion[];
+}

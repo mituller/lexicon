@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from .auth import current_user_id
 from .config import get_settings
+from .decks import DeckService, DeckSummary, DueTerm, Quiz, apply_quiz_results
 from .dynamo import ProgressStore
 from .logging_setup import configure_logging, install_request_logging, json_event
 from .models import ProgressRecord, Rating, SearchHit, UserAggregate, UserList
@@ -44,6 +45,19 @@ class TutorRequest(SearchRequest):
 class TutorResponse(BaseModel):
     answer: str
     hits: list[SearchHit]
+
+
+class StartDeckRequest(BaseModel):
+    domain: str
+    difficulty_tier: str
+
+
+class QuizAnswersRequest(BaseModel):
+    answers: list[dict[str, Any]]
+
+
+class StartDeckResponse(BaseModel):
+    created: int
 
 
 class ProgressUpdate(BaseModel):
@@ -130,6 +144,57 @@ def create_app() -> FastAPI:
     @app.get("/v1/stats")
     def stats(user_id: str = Depends(current_user_id)) -> UserAggregate:
         return ProgressStore().get_aggregate(user_id)
+
+    # --- decks & retention ---
+
+    @app.get("/v1/decks")
+    def list_decks() -> list[DeckSummary]:
+        return DeckService().list_decks()
+
+    @app.get("/v1/vocabulary")
+    def vocabulary(
+        domain: str,
+        difficulty_tier: str,
+        limit: int = 200,
+    ) -> list[dict[str, str]]:
+        """Terms in a deck (for browsing and distractor generation)."""
+        return DeckService().deck_terms(
+            domain=domain, difficulty_tier=difficulty_tier, limit=limit
+        )
+
+    @app.post("/v1/deck/start")
+    def start_deck(
+        request: StartDeckRequest,
+        user_id: str = Depends(current_user_id),
+    ) -> StartDeckResponse:
+        created = DeckService().start_deck(
+            ProgressStore(), user_id, domain=request.domain, difficulty_tier=request.difficulty_tier
+        )
+        return StartDeckResponse(created=created)
+
+    @app.get("/v1/review/due")
+    def review_due(
+        limit: int = 20,
+        user_id: str = Depends(current_user_id),
+    ) -> list[DueTerm]:
+        return DeckService().due_terms(ProgressStore(), user_id, limit=limit)
+
+    @app.get("/v1/quiz")
+    def quiz(
+        domain: str,
+        difficulty_tier: str,
+        count: int = 10,
+    ) -> Quiz:
+        return DeckService().make_quiz(
+            domain=domain, difficulty_tier=difficulty_tier, count=count
+        )
+
+    @app.post("/v1/quiz/grade")
+    def grade_quiz(
+        request: QuizAnswersRequest,
+        user_id: str = Depends(current_user_id),
+    ) -> dict[str, int]:
+        return apply_quiz_results(ProgressStore(), user_id, request.answers)
 
     @app.get("/v1/lists")
     def list_lists(user_id: str = Depends(current_user_id)) -> list[UserList]:

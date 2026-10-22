@@ -183,3 +183,138 @@ button.primary {
   color: #ffcf7a;
   font-size: 0.85rem;
 }
+
+.muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.tabs button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.tabs button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1020;
+  font-weight: 600;
+}
+
+/* Decks */
+.decks {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.deck {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem;
+}
+
+.deck-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.deck-title {
+  font-weight: 600;
+}
+
+.deck-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Flashcard */
+.progress-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #0d0f15;
+  color: var(--text);
+  cursor: pointer;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.card-front {
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.card-back {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.card .definition {
+  font-size: 1.05rem;
+}
+
+.hint {
+  margin-top: 0.5rem;
+}
+
+/* Quiz */
+.quiz-question {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem;
+  margin: 0.75rem 0;
+}
+
+.quiz-question .term {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.quiz-option {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  cursor: pointer;
+}
+
+.quiz-option .chosen {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.score {
+  font-size: 1.5rem;
+  font-weight: 600;
+}

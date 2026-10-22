@@ -1,8 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { SearchPanel } from "./components/SearchPanel";
+import { StudyPanel } from "./components/StudyPanel";
 import { useAuthStore } from "./stores/useAuthStore";
 import { useVocabStore } from "./stores/useVocabStore";
+
+type Tab = "study" | "search";
 
 export default function App() {
   const stats = useVocabStore((state) => state.stats);
@@ -10,6 +13,8 @@ export default function App() {
   const pendingCount = useVocabStore((state) => state.pendingCount);
 
   const { ready, authenticated, error: authError, init, login, logout } = useAuthStore();
+
+  const [tab, setTab] = useState<Tab>("study");
 
   useEffect(() => {
     void init();
@@ -24,7 +29,7 @@ export default function App() {
       <header className="app-header">
         <div>
           <h1>Lexicon</h1>
-          <p className="tagline">Expand your English, one term at a time.</p>
+          <p className="tagline">Learn a set, test yourself, keep the words.</p>
         </div>
         {ready && (
           <div className="auth">
@@ -64,7 +69,24 @@ export default function App() {
             <p className="pending">{pendingCount} review(s) waiting to sync</p>
           )}
 
-          <SearchPanel />
+          <nav className="tabs">
+            <button
+              type="button"
+              className={tab === "study" ? "active" : ""}
+              onClick={() => setTab("study")}
+            >
+              Study
+            </button>
+            <button
+              type="button"
+              className={tab === "search" ? "active" : ""}
+              onClick={() => setTab("search")}
+            >
+              Search
+            </button>
+          </nav>
+
+          {tab === "study" ? <StudyPanel /> : <SearchPanel />}
         </>
       )}
     </main>
