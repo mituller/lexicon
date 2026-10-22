@@ -112,13 +112,19 @@ impl Drop for LoginGuard {
 /// Loopback-login timeout: if the user abandons the browser, release the port after this.`
 const LOGIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
-/// Block the calling thread until the loopback server receives the redirect.
-fn wait_for_code(port: u16, expected_state: &str) -> Result<String, String> {
-    let server = std::sync::Arc::new(
-        tiny_http::Server::http(format!("127.0.0.1:{port}"))
-            .map_err(|error| format!("could not bind loopback port {port}: {error}"))?,
-    );
+/// Bind the loopback listener. Called **before** the browser opens so the OAuth redirect can
+/// never arrive at an unbound port (which shows as "Firefox can't connect to 127.0.0.1:4200").
+fn bind_loopback(port: u16) -> Result<std::sync::Arc<tiny_http::Server>, String> {
+    let server = tiny_http::Server::http(format!("127.0.0.1:{port}"))
+        .map_err(|error| format!("could not bind loopback port {port}: {error}"))?;
+    Ok(std::sync::Arc::new(server))
+}
 
+/// Block the calling thread until the (already-bound) loopback server receives the redirect.
+fn wait_for_code(
+    server: std::sync::Arc<tiny_http::Server>,
+    expected_state: &str,
+) -> Result<String, String> {
     // Watchdog: `unblock()` makes `incoming_requests()` terminate, releasing the port so a
     // later login isn't blocked by an abandoned browser tab.
     {
@@ -233,11 +239,13 @@ pub async fn login() -> Result<Tokens, String> {
     let state = URL_SAFE_NO_PAD.encode(rand::random::<[u8; 16]>());
     let url = build_authorize_url(&config, &challenge, &state);
 
+    // Bind BEFORE opening the browser. Otherwise a fast redirect (cached session / quick
+    // sign-up) can hit 127.0.0.1:4200 while nothing is listening yet.
+    let server = bind_loopback(config.port)?;
     open::that(&url).map_err(|error| format!("could not open the browser: {error}"))?;
 
-    let port = config.port;
     let state_clone = state.clone();
-    let code = tokio::task::spawn_blocking(move || wait_for_code(port, &state_clone))
+    let code = tokio::task::spawn_blocking(move || wait_for_code(server, &state_clone))
         .await
         .map_err(|error| error.to_string())??;
 
