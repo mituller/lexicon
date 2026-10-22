@@ -1,0 +1,85 @@
+# AI / technical vocabulary seed list.
+# One term per line. Lines starting with # are ignored; "term,pos" is tolerated.
+# Bedrock assigns the definition, example, synonyms, CEFR level, and subfield.
+
+machine learning
+deep learning
+neural network
+weights
+bias
+parameters
+training
+inference
+gradient descent
+backpropagation
+loss function
+overfitting
+underfitting
+regularization
+hyperparameter
+epoch
+batch size
+learning rate
+feature
+label
+supervised learning
+unsupervised learning
+reinforcement learning
+embedding
+vector
+token
+tokenization
+transformer
+attention
+self-attention
+multi-head attention
+encoder
+decoder
+context window
+prompt
+prompt engineering
+system prompt
+zero-shot learning
+few-shot learning
+fine-tuning
+transfer learning
+pre-training
+foundation model
+large language model
+hallucination
+grounding
+retrieval-augmented generation
+vector database
+semantic search
+cosine similarity
+nearest neighbor
+chunking
+reranking
+agent
+tool calling
+function calling
+chain of thought
+temperature
+top-p
+beam search
+quantization
+distillation
+model drift
+evaluation
+benchmark
+latency
+throughput
+time to first token
+guardrail
+alignment
+rlhf
+lora
+mixture of experts
+knowledge graph
+multimodal
+diffusion model
+dataset
+annotation
+data leakage
+streaming
+cold start

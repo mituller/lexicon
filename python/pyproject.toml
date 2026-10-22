@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lexicon"
+version = "0.1.0"
+description = "RAG vocabulary tutor runtime: ingestion, retrieval, tutoring, progress (AWS S3 Vectors + Bedrock)."
+requires-python = ">=3.11"
+dependencies = [
+  "boto3>=1.39",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.3",
+  "pyjwt[crypto]>=2.8",
+  "fsrs>=5.0",
+  "fastapi>=0.115",
+  "mangum>=0.19",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "pytest>=8.2",
+  "httpx>=0.27",
+  "boto3-stubs[s3vectors,bedrock-runtime,dynamodb]>=1.39",
+  "types-pyjwt",
+]
+
+[project.scripts]
+lexicon = "lexicon.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lexicon"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501", "B008"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

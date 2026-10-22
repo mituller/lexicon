@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Node / web
+node_modules/
+apps/web/dist/
+apps/web/.vite/
+*.local
+*.tsbuildinfo
+
+# Rust / Tauri
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/dist/
+apps/desktop/src-tauri/gen/
+
+# CDK
+infra/cdk/cdk.out/
+infra/cdk/.cdk.staging/
+cdk.context.json
+
+# Local data
+*.db
+*.sqlite
+lexicon-settings.json
+
+# OS
+.DS_Store

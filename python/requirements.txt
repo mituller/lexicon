@@ -1,0 +1,9 @@
+# Runtime dependencies installed into the Lambda bundle by CDK's `Code.from_asset` bundling.
+# Kept in sync with pyproject.toml [project].dependencies (dev tooling excluded).
+boto3>=1.39
+pydantic>=2.7
+pydantic-settings>=2.3
+pyjwt[crypto]>=2.8
+fsrs>=5.0
+fastapi>=0.115
+mangum>=0.19
