@@ -117,6 +117,7 @@ const LOGIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 fn bind_loopback(port: u16) -> Result<std::sync::Arc<tiny_http::Server>, String> {
     let server = tiny_http::Server::http(format!("127.0.0.1:{port}"))
         .map_err(|error| format!("could not bind loopback port {port}: {error}"))?;
+    eprintln!("[auth] loopback listener bound on 127.0.0.1:{port}");
     Ok(std::sync::Arc::new(server))
 }
 
@@ -138,6 +139,7 @@ fn wait_for_code(
     let result = (|| -> Result<String, String> {
         for request in server.incoming_requests() {
             let url = request.url().to_string();
+            eprintln!("[auth] loopback received request: {url}");
             let params = parse_query(url.split('?').nth(1).unwrap_or(""));
 
             if let Some(error) = params.iter().find(|(k, _)| k == "error") {
@@ -242,6 +244,7 @@ pub async fn login() -> Result<Tokens, String> {
     // Bind BEFORE opening the browser. Otherwise a fast redirect (cached session / quick
     // sign-up) can hit 127.0.0.1:4200 while nothing is listening yet.
     let server = bind_loopback(config.port)?;
+    eprintln!("[auth] opening browser for: {url}");
     open::that(&url).map_err(|error| format!("could not open the browser: {error}"))?;
 
     let state_clone = state.clone();
@@ -291,6 +294,35 @@ pub async fn refresh(refresh_token: &str) -> Result<Tokens, String> {
 ///
 /// Used only to key *local* storage (keychain account name / SQLite user). The server always
 /// re-verifies the token, so this is not a trust decision.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loopback_binds_and_serves_a_request() {
+        let port = 43210u16; // avoid the real login port
+        let server = bind_loopback(port).expect("bind should succeed");
+
+        let handle = std::thread::spawn(move || {
+            for request in server.incoming_requests() {
+                let _ = request.respond(tiny_http::Response::from_string("ok-lexicon"));
+                break;
+            }
+        });
+
+        use std::io::{Read, Write};
+        let mut stream =
+            std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect should succeed");
+        stream
+            .write_all(b"GET /callback?code=x HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
+            .unwrap();
+        let mut body = String::new();
+        stream.read_to_string(&mut body).unwrap();
+        assert!(body.contains("ok-lexicon"), "unexpected response: {body}");
+        handle.join().unwrap();
+    }
+}
+
 pub fn sub_from_id_token(token: &str) -> Option<String> {
     let payload = token.split('.').nth(1)?;
     let decoded = URL_SAFE_NO_PAD
