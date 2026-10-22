@@ -50,8 +50,11 @@ VECTOR_INDEX = "vocabulary"
 # uses 5173. GitHub Pages / custom-domain URLs get added when the web ships.
 DESKTOP_CALLBACK_URL = "http://127.0.0.1:4200/callback"
 DEV_WEB_URL = "http://localhost:5173"
-DEFAULT_CALLBACK_URLS = [DESKTOP_CALLBACK_URL, DEV_WEB_URL]
-DEFAULT_LOGOUT_URLS = [DEV_WEB_URL]
+# Both hostnames for the dev server: Vite may be opened as either, and a redirect_uri that
+# doesn't exactly match the allow-list fails with Cognito's opaque "redirect_mismatch".
+DEV_WEB_URL_ALT = "http://127.0.0.1:5173"
+DEFAULT_CALLBACK_URLS = [DESKTOP_CALLBACK_URL, DEV_WEB_URL, DEV_WEB_URL_ALT]
+DEFAULT_LOGOUT_URLS = [DEV_WEB_URL, DEV_WEB_URL_ALT]
 
 
 class LexiconStack(Stack):

@@ -6,12 +6,17 @@
 //!
 //! The WebView is never used for login (it would be a security and CORS problem).
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use base64::Engine;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
 const SCOPES: &str = "openid email profile";
+
+/// Registered on the Cognito app client (see infra/cdk/lexicon_stack.py).
+const DEFAULT_CALLBACK_URL: &str = "http://127.0.0.1:4200/callback";
 
 pub struct AuthConfig {
     pub domain: String,
@@ -32,8 +37,17 @@ impl AuthConfig {
             .map_err(|_| "LEXICON_COGNITO_DOMAIN is not set".to_string())?;
         let client_id = std::env::var("LEXICON_COGNITO_CLIENT_ID")
             .map_err(|_| "LEXICON_COGNITO_CLIENT_ID is not set".to_string())?;
+        // The redirect URI MUST exactly match a URL registered on the Cognito app client.
+        // It is hardcoded on purpose: an env-var override that doesn't match the allow-list
+        // produces Cognito's opaque "An error was encountered with the requested page"
+        // (redirect_mismatch) instead of anything actionable.
+        //
+        // To use a different port, register the new URL on the app client first, e.g.:
+        //   cdk deploy -c extra_callback_urls='["http://127.0.0.1:4321/callback"]'
         let callback_url = std::env::var("LEXICON_COGNITO_CALLBACK_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:4200/callback".to_string());
+            .ok()
+            .filter(|value| value == DEFAULT_CALLBACK_URL)
+            .unwrap_or_else(|| DEFAULT_CALLBACK_URL.to_string());
         let port = callback_url
             .rsplit(':')
             .next()
@@ -73,36 +87,80 @@ fn build_authorize_url(config: &AuthConfig, challenge: &str, state: &str) -> Str
     )
 }
 
+/// Only one login may run at a time — a second bind to the same loopback port fails with
+/// `EADDRINUSE` and surfaces as a confusing "could not bind loopback port" error.
+static LOGGING_IN: AtomicBool = AtomicBool::new(false);
+
+struct LoginGuard;
+
+impl LoginGuard {
+    fn acquire() -> Result<Self, String> {
+        if LOGGING_IN.swap(true, Ordering::SeqCst) {
+            Err("a login is already in progress".to_string())
+        } else {
+            Ok(Self)
+        }
+    }
+}
+
+impl Drop for LoginGuard {
+    fn drop(&mut self) {
+        LOGGING_IN.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Loopback-login timeout: if the user abandons the browser, release the port after this.`
+const LOGIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
 /// Block the calling thread until the loopback server receives the redirect.
 fn wait_for_code(port: u16, expected_state: &str) -> Result<String, String> {
-    let server = tiny_http::Server::http(format!("127.0.0.1:{port}"))
-        .map_err(|error| format!("could not bind loopback port {port}: {error}"))?;
+    let server = std::sync::Arc::new(
+        tiny_http::Server::http(format!("127.0.0.1:{port}"))
+            .map_err(|error| format!("could not bind loopback port {port}: {error}"))?,
+    );
 
-    for request in server.incoming_requests() {
-        let url = request.url().to_string();
-        let params = parse_query(url.split('?').nth(1).unwrap_or(""));
-
-        if let Some(error) = params.iter().find(|(k, _)| k == "error") {
-            let _ = request.respond(html_response("Login failed. You can close this window."));
-            return Err(format!("authorization failed: {}", error.1));
-        }
-
-        if let Some((_, code)) = params.iter().find(|(k, _)| k == "code") {
-            let state_ok = params
-                .iter()
-                .find(|(k, _)| k == "state")
-                .map(|(_, value)| value == expected_state)
-                .unwrap_or(false);
-            let _ = request.respond(html_response("Login complete. You can close this window."));
-            if !state_ok {
-                return Err("state mismatch in OAuth callback".to_string());
-            }
-            return Ok(code.clone());
-        }
-
-        let _ = request.respond(html_response("Waiting for login..."));
+    // Watchdog: `unblock()` makes `incoming_requests()` terminate, releasing the port so a
+    // later login isn't blocked by an abandoned browser tab.
+    {
+        let watchdog = server.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(LOGIN_TIMEOUT);
+            watchdog.unblock();
+        });
     }
-    Err("loopback server closed before receiving a code".to_string())
+
+    let result = (|| -> Result<String, String> {
+        for request in server.incoming_requests() {
+            let url = request.url().to_string();
+            let params = parse_query(url.split('?').nth(1).unwrap_or(""));
+
+            if let Some(error) = params.iter().find(|(k, _)| k == "error") {
+                let _ = request.respond(html_response("Login failed. You can close this window."));
+                return Err(format!("authorization failed: {}", error.1));
+            }
+
+            if let Some((_, code)) = params.iter().find(|(k, _)| k == "code") {
+                let state_ok = params
+                    .iter()
+                    .find(|(k, _)| k == "state")
+                    .map(|(_, value)| value == expected_state)
+                    .unwrap_or(false);
+                let _ =
+                    request.respond(html_response("Login complete. You can close this window."));
+                if !state_ok {
+                    return Err("state mismatch in OAuth callback".to_string());
+                }
+                return Ok(code.clone());
+            }
+
+            let _ = request.respond(html_response("Waiting for login..."));
+        }
+        Err("loopback server closed before receiving a code".to_string())
+    })();
+
+    // Always release the port, even on error paths, so the next login can bind it.
+    server.unblock();
+    result
 }
 
 fn parse_query(query: &str) -> Vec<(String, String)> {
@@ -169,6 +227,7 @@ async fn exchange_code(config: &AuthConfig, code: &str, verifier: &str) -> Resul
 
 /// Run the full interactive login and return the token set.
 pub async fn login() -> Result<Tokens, String> {
+    let _guard = LoginGuard::acquire()?; // no concurrent logins; released on drop
     let config = AuthConfig::from_env()?;
     let (verifier, challenge) = pkce_pair();
     let state = URL_SAFE_NO_PAD.encode(rand::random::<[u8; 16]>());
