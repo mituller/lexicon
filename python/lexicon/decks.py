@@ -25,7 +25,7 @@ from .srs import get_scheduler
 from .vectorstore import VectorStore
 
 
-def vector_to_term(item: dict[str, Any]) -> dict[str, str]:
+def vector_to_term(item: dict[str, Any]) -> dict[str, Any]:
     """Map an S3 Vectors row to a plain term dict (term_id == vector key)."""
     metadata: dict[str, Any] = item.get("metadata") or {}
     synonyms = metadata.get("synonyms") or []
@@ -89,7 +89,7 @@ class DeckService:
     def __init__(self, store: VectorStore | None = None) -> None:
         self._store = store or VectorStore()
 
-    def all_terms(self) -> list[dict[str, str]]:
+    def all_terms(self) -> list[dict[str, Any]]:
         """Every global term in the index (user-scoped and global)."""
         return [vector_to_term(item) for item in self._store.list_all_vectors()]
 
@@ -119,7 +119,7 @@ class DeckService:
         domain: str,
         difficulty_tier: str,
         limit: int = 200,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, Any]]:
         """Terms in one deck, deterministic order, capped at ``limit``."""
         matches = [
             term

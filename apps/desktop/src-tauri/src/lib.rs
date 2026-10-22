@@ -37,26 +37,48 @@ fn client() -> Result<reqwest::Client, String> {
         .map_err(|error| error.to_string())
 }
 
+/// Refresh the ID token from the stored refresh token, returning the new pair on success.
+async fn refresh_tokens() -> Option<(String, String)> {
+    let refresh = REFRESH_TOKEN.lock().ok()?.clone()?;
+    match auth::refresh(&refresh).await {
+        Ok(tokens) => Some((tokens.id_token, tokens.refresh_token)),
+        Err(_) => None,
+    }
+}
+
 async fn call_api(
     method: reqwest::Method,
     path: &str,
     body: Option<Value>,
 ) -> Result<Value, String> {
-    let url = format!("{}{}", api_base(), path);
-    let mut builder = client()?.request(method, url);
-    if let Some(token) = TOKEN.lock().map_err(|e| e.to_string())?.clone() {
-        builder = builder.bearer_auth(token);
+    let mut refreshed_once = false;
+    loop {
+        let url = format!("{}{}", api_base(), path);
+        let mut builder = client()?.request(method.clone(), url);
+        if let Some(token) = TOKEN.lock().map_err(|e| e.to_string())?.clone() {
+            builder = builder.bearer_auth(token);
+        }
+        if let Some(payload) = &body {
+            builder = builder.json(payload);
+        }
+        let response = builder.send().await.map_err(|error| error.to_string())?;
+        let status = response.status();
+
+        // The ID token expires after an hour; transparently refresh and retry once on 401.
+        if status == reqwest::StatusCode::UNAUTHORIZED && !refreshed_once {
+            if let Some((id_token, refresh_token)) = refresh_tokens().await {
+                store_tokens(id_token, refresh_token);
+                refreshed_once = true;
+                continue;
+            }
+        }
+
+        let value: Value = response.json().await.map_err(|error| error.to_string())?;
+        if !status.is_success() {
+            return Err(format!("API error {status}: {value}"));
+        }
+        return Ok(value);
     }
-    if let Some(payload) = body {
-        builder = builder.json(&payload);
-    }
-    let response = builder.send().await.map_err(|error| error.to_string())?;
-    let status = response.status();
-    let value: Value = response.json().await.map_err(|error| error.to_string())?;
-    if !status.is_success() {
-        return Err(format!("API error {status}: {value}"));
-    }
-    Ok(value)
 }
 
 #[tauri::command]

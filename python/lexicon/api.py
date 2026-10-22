@@ -156,7 +156,7 @@ def create_app() -> FastAPI:
         domain: str,
         difficulty_tier: str,
         limit: int = 200,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, Any]]:
         """Terms in a deck (for browsing and distractor generation)."""
         return DeckService().deck_terms(
             domain=domain, difficulty_tier=difficulty_tier, limit=limit
