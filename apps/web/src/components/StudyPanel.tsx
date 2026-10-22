@@ -11,26 +11,7 @@ const RATINGS: { label: string; value: Rating }[] = [
 ];
 
 export function StudyPanel() {
-  const {
-    screen,
-    decks,
-    cards,
-    cardIndex,
-    revealed,
-    quiz,
-    quizAnswers,
-    quizScore,
-    loading,
-    error,
-    loadDecks,
-    startDeck,
-    reveal,
-    rate,
-    loadQuiz,
-    answerQuiz,
-    submitQuiz,
-    backToDecks,
-  } = useStudyStore();
+  const { screen, decks, loading, error, loadDecks, startDeck, loadQuiz } = useStudyStore();
 
   useEffect(() => {
     void loadDecks();
@@ -86,36 +67,49 @@ export function StudyPanel() {
       </ul>
     </section>
   );
+}
 
-  function StudyScreen() {
-    const card = cards[cardIndex];
-    if (!card) {
-      return (
-        <section className="panel">
-          <h2>All done 🎉</h2>
-          <p className="tagline">No terms are due right now. Pick another set.</p>
-          <button className="primary" type="button" onClick={backToDecks}>
-            Back to sets
-          </button>
-        </section>
-      );
-    }
+function StudyScreen() {
+  const cardIndex = useStudyStore((state) => state.cardIndex);
+  const cards = useStudyStore((state) => state.cards);
+  const revealed = useStudyStore((state) => state.revealed);
+  const reveal = useStudyStore((state) => state.reveal);
+  const rate = useStudyStore((state) => state.rate);
+  const backToDecks = useStudyStore((state) => state.backToDecks);
 
+  const card = cards[cardIndex];
+  if (!card) {
     return (
       <section className="panel">
-        <div className="progress-line">
-          <span>
-            {cardIndex + 1} / {cards.length}
-          </span>
-          <span className="badges">
-            {card.cefr_level && <span className="badge">{card.cefr_level}</span>}
-            {card.difficulty_tier && <span className="badge">{card.difficulty_tier}</span>}
-          </span>
-        </div>
+        <h2>All done 🎉</h2>
+        <p className="tagline">No terms are due right now. Pick another set.</p>
+        <button className="primary" type="button" onClick={backToDecks}>
+          Back to sets
+        </button>
+      </section>
+    );
+  }
 
+  return (
+    <section className="panel">
+      <div className="progress-line">
+        <span>
+          Card {cardIndex + 1} of {cards.length}
+        </span>
+        <button type="button" className="ghost" onClick={backToDecks}>
+          ← Back to sets
+        </button>
+      </div>
+
+      {!revealed ? (
         <button className="card" type="button" onClick={reveal}>
           <span className="card-front">{card.term}</span>
-          {revealed && (
+          <span className="muted hint">Tap to reveal the definition</span>
+        </button>
+      ) : (
+        <>
+          <div className="card revealed">
+            <span className="card-front">{card.term}</span>
             <span className="card-back">
               <span className="definition">{card.definition}</span>
               {card.example && <span className="example">“{card.example}”</span>}
@@ -123,11 +117,8 @@ export function StudyPanel() {
                 <span className="muted">synonyms: {card.synonyms.join(", ")}</span>
               )}
             </span>
-          )}
-          {!revealed && <span className="muted hint">tap to reveal</span>}
-        </button>
-
-        {revealed && (
+          </div>
+          <p className="rate-prompt">How well did you know it?</p>
           <div className="review-buttons">
             {RATINGS.map((rating) => (
               <button key={rating.value} type="button" onClick={() => void rate(rating.value)}>
@@ -135,63 +126,77 @@ export function StudyPanel() {
               </button>
             ))}
           </div>
-        )}
-      </section>
-    );
-  }
+        </>
+      )}
+    </section>
+  );
+}
 
-  function QuizScreen() {
-    if (!quiz) return null;
-    if (quizScore) {
-      const pct = quizScore.total ? Math.round((quizScore.correct / quizScore.total) * 100) : 0;
-      return (
-        <section className="panel">
-          <h2>Quiz result</h2>
-          <p className="score">
-            {quizScore.correct} / {quizScore.total} correct ({pct}%)
-          </p>
-          <button className="primary" type="button" onClick={backToDecks}>
-            Back to sets
-          </button>
-        </section>
-      );
-    }
+function QuizScreen() {
+  const quiz = useStudyStore((state) => state.quiz);
+  const quizAnswers = useStudyStore((state) => state.quizAnswers);
+  const quizScore = useStudyStore((state) => state.quizScore);
+  const loading = useStudyStore((state) => state.loading);
+  const answerQuiz = useStudyStore((state) => state.answerQuiz);
+  const submitQuiz = useStudyStore((state) => state.submitQuiz);
+  const backToDecks = useStudyStore((state) => state.backToDecks);
 
+  if (!quiz) return null;
+
+  if (quizScore) {
+    const pct = quizScore.total ? Math.round((quizScore.correct / quizScore.total) * 100) : 0;
     return (
       <section className="panel">
-        <h2>Quiz — {quiz.domain === "general" ? "General English" : "AI / Technical"}</h2>
-        {quiz.questions.map((question, index) => (
-          <div key={question.term_id} className="quiz-question">
-            <p className="term">
-              {index + 1}. {question.term}
-            </p>
-            {question.options.map((option, optionIndex) => {
-              const selected = quizAnswers[index] !== null && quizAnswers[index] !== undefined;
-              const chosen = selected && quizAnswers[index] === (optionIndex === question.answer_index);
-              return (
-                <label key={optionIndex} className="quiz-option">
-                  <input
-                    type="radio"
-                    name={`q-${index}`}
-                    disabled={selected}
-                    onChange={() => answerQuiz(index, optionIndex === question.answer_index)}
-                  />
-                  <span className={chosen ? "chosen" : ""}>{option}</span>
-                </label>
-              );
-            })}
-          </div>
-        ))}
-        <button
-          className="primary"
-          type="button"
-          disabled={loading || quizAnswers.filter((answer) => answer !== null).length < quiz.questions.length}
-          onClick={() => void submitQuiz()}
-        >
-          Submit
+        <h2>Quiz result</h2>
+        <p className="score">
+          {quizScore.correct} / {quizScore.total} correct ({pct}%)
+        </p>
+        <button className="primary" type="button" onClick={backToDecks}>
+          Back to sets
         </button>
-        {loading && <span className="muted"> grading…</span>}
       </section>
     );
   }
+
+  const answered = quizAnswers.filter((answer) => answer !== null).length;
+
+  return (
+    <section className="panel">
+      <h2>Quiz — {quiz.domain === "general" ? "General English" : "AI / Technical"}</h2>
+      <p className="muted">
+        {answered} of {quiz.questions.length} answered
+      </p>
+      {quiz.questions.map((question, index) => (
+        <div key={question.term_id} className="quiz-question">
+          <p className="term">
+            {index + 1}. {question.term}
+          </p>
+          {question.options.map((option, optionIndex) => {
+            const selected = quizAnswers[index] !== null && quizAnswers[index] !== undefined;
+            const chosen = selected && quizAnswers[index] === (optionIndex === question.answer_index);
+            return (
+              <label key={optionIndex} className="quiz-option">
+                <input
+                  type="radio"
+                  name={`q-${index}`}
+                  disabled={selected}
+                  onChange={() => answerQuiz(index, optionIndex === question.answer_index)}
+                />
+                <span className={chosen ? "chosen" : ""}>{option}</span>
+              </label>
+            );
+          })}
+        </div>
+      ))}
+      <button
+        className="primary"
+        type="button"
+        disabled={loading || answered < quiz.questions.length}
+        onClick={() => void submitQuiz()}
+      >
+        Submit
+      </button>
+      {loading && <span className="muted"> grading…</span>}
+    </section>
+  );
 }

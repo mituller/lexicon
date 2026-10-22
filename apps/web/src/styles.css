@@ -288,6 +288,21 @@ button.primary {
   margin-top: 0.5rem;
 }
 
+.card.revealed {
+  cursor: default;
+}
+
+.rate-prompt {
+  margin: 1rem 0 0.5rem;
+  color: var(--muted);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 /* Quiz */
 .quiz-question {
   border: 1px solid var(--border);
