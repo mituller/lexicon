@@ -74,6 +74,7 @@ async fn call_api(
         }
 
         let value: Value = response.json().await.map_err(|error| error.to_string())?;
+        eprintln!("[api] {method} {path} -> {status}");
         if !status.is_success() {
             return Err(format!("API error {status}: {value}"));
         }
@@ -98,8 +99,11 @@ async fn list_progress() -> Result<Value, String> {
 
 #[tauri::command]
 async fn review_term(term_id: String, update: Value) -> Result<Value, String> {
+    eprintln!("[review] invoked term_id={term_id} update={update}");
     let path = format!("/v1/progress/{}", term_id);
-    call_api(reqwest::Method::PUT, &path, Some(update)).await
+    let result = call_api(reqwest::Method::PUT, &path, Some(update)).await;
+    eprintln!("[review] result={result:?}");
+    result
 }
 
 #[tauri::command]

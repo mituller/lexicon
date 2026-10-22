@@ -76,6 +76,7 @@ function StudyScreen() {
   const reveal = useStudyStore((state) => state.reveal);
   const rate = useStudyStore((state) => state.rate);
   const backToDecks = useStudyStore((state) => state.backToDecks);
+  const error = useStudyStore((state) => state.error);
 
   const card = cards[cardIndex];
   if (!card) {
@@ -83,6 +84,7 @@ function StudyScreen() {
       <section className="panel">
         <h2>All done 🎉</h2>
         <p className="tagline">No terms are due right now. Pick another set.</p>
+        {error && <p className="error">{error}</p>}
         <button className="primary" type="button" onClick={backToDecks}>
           Back to sets
         </button>
@@ -92,6 +94,7 @@ function StudyScreen() {
 
   return (
     <section className="panel">
+      {error && <p className="error">{error}</p>}
       <div className="progress-line">
         <span>
           Card {cardIndex + 1} of {cards.length}
