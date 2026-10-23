@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     generation_model_id: str = "us.amazon.nova-lite-v1:0"
     generation_max_tokens: int = 1024
     generation_temperature: float = 0.3
+    # Writes the stored dictionary entries, once per word. Claude Sonnet 4.6 was the only model
+    # tested whose etymologies were reliable (Nova Lite/Pro invent them); empty = generation model.
+    enrich_model_id: str = "us.anthropic.claude-sonnet-4-6"
+    # Batch-rates pooled words (~50 per call). Nova Pro ranks them almost exactly like Sonnet
+    # (rank correlation 0.95 on a 50-word sample) at ~1/5 the cost.
+    rate_model_id: str = "us.amazon.nova-pro-v1:0"
 
     # --- DynamoDB ---
     dynamodb_table: str = "lexicon"

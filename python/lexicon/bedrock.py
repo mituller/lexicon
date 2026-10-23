@@ -61,15 +61,22 @@ class BedrockClient:
 
     # --- Generation ---
 
-    def generate(self, prompt: str, *, system: str | None = None) -> str:
-        """Generate a completion with Nova Lite (non-streaming)."""
+    def generate(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        model_id: str | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Generate a completion (non-streaming); defaults to the configured generation model."""
         settings = get_settings()
         messages: list[dict[str, Any]] = [{"role": "user", "content": [{"text": prompt}]}]
         request: dict[str, Any] = {
-            "modelId": settings.generation_model_id,
+            "modelId": model_id or settings.generation_model_id,
             "messages": messages,
             "inferenceConfig": {
-                "maxTokens": settings.generation_max_tokens,
+                "maxTokens": max_tokens or settings.generation_max_tokens,
                 "temperature": settings.generation_temperature,
             },
         }

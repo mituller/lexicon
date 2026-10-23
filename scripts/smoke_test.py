@@ -240,7 +240,7 @@ def _check_seeded(session, settings) -> None:
     if count:
         report(PASS, "Corpus seeded", f"at least {count} vector(s) present")
     else:
-        report(WARN, "Corpus seeded", "index is empty — run build-corpus then seed")
+        report(WARN, "Corpus seeded", "index is empty — run sync-sources then refill")
 
 
 def _finish() -> int:

@@ -13,6 +13,10 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+def utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
 class Scope(StrEnum):
     """Vector visibility scope. S3 Vectors has no namespaces, so this is a metadata filter."""
 
@@ -58,10 +62,13 @@ class FilterableMetadata(BaseModel):
     scope: str = Field(default=Scope.GLOBAL.value, description="global | user")
     owner_id: str = Field(default="", description="Cognito sub for user-scoped vectors; '' for global")
     list_id: str = Field(default="", description="User list id, when scope=user")
+    difficulty: int | None = Field(
+        default=None, description="0-100 difficulty score for range filters (see difficulty.py)"
+    )
 
     def to_vector_metadata(self) -> dict[str, Any]:
         """Return only non-empty keys so ``$exists`` filters behave predictably."""
-        return {k: v for k, v in self.model_dump().items() if v != ""}
+        return {k: v for k, v in self.model_dump().items() if v != "" and v is not None}
 
 
 class TermPayload(BaseModel):
@@ -92,6 +99,51 @@ class VocabularyTerm(BaseModel):
         if self.payload.synonyms:
             parts.append("Synonyms: " + ", ".join(self.payload.synonyms))
         return "\n".join(p.strip() for p in parts if p and p.strip())
+
+
+class TermRecord(BaseModel):
+    """The canonical, fully enriched vocabulary term (stored in the DynamoDB term index).
+
+    S3 Vectors holds the embedding plus the lean payload needed for search results; the richer
+    learning content (multiple examples, confusables, etymology) lives here.
+    """
+
+    term_id: str
+    term: str
+    domain: str = "general"
+    pos: str = ""
+    definition: str
+    examples: list[str] = Field(default_factory=list)
+    synonyms: list[str] = Field(default_factory=list)
+    confused_with: list[str] = Field(default_factory=list)
+    etymology: str = ""
+    subfield: str = ""
+    cefr_level: str = ""
+    difficulty: int = Field(ge=0, le=100)
+    source: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+    def to_vocabulary_term(self) -> VocabularyTerm:
+        """Project onto the S3 Vectors record (filterable metadata + lean payload)."""
+        cefr = CefrLevel(self.cefr_level) if self.cefr_level else CefrLevel.C1
+        return VocabularyTerm(
+            meta=FilterableMetadata(
+                domain=self.domain,
+                subfield=self.subfield,
+                difficulty_tier=CEFR_TO_TIER[cefr].value,
+                cefr_level=cefr.value,
+                difficulty=self.difficulty,
+            ),
+            payload=TermPayload(
+                term_id=self.term_id,
+                term=self.term,
+                definition=self.definition,
+                example=self.examples[0] if self.examples else "",
+                synonyms=self.synonyms,
+                pos=self.pos,
+                source=self.source,
+            ),
+        )
 
 
 class SearchHit(BaseModel):
@@ -127,10 +179,6 @@ class CardState(StrEnum):
     LEARNING = "learning"
     REVIEW = "review"
     RELEARNING = "relearning"
-
-
-def utcnow() -> datetime:
-    return datetime.now(UTC)
 
 
 class ProgressRecord(BaseModel):

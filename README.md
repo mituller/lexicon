@@ -57,15 +57,17 @@ pip install -e ".[dev]"
 pytest
 ruff check . && mypy lexicon
 
-# General English from CEFR-J word lists (Bedrock-enriched JSONL)
-#   --no-generate skips Bedrock for an offline dry run
-python -m lexicon build-corpus --out ../data/seed/generated.jsonl --limit-per-level 60
-python -m lexicon seed ../data/seed/generated.jsonl
-
-# AI / technical domain from a curated term list (Bedrock assigns CEFR level + subfield)
-python -m lexicon build-domain-corpus --terms ../data/seed/ai_terms.txt \
-  --domain ai --out ../data/seed/ai_generated.jsonl
-python -m lexicon seed ../data/seed/ai_generated.jsonl
+# Vocabulary grows on demand from online word lists (Octanove C1/C2 + NAWL):
+#   1. fetch + score headwords into the DynamoDB candidate pool (no Bedrock)
+python -m lexicon sync-sources
+#      add your own list: --list gre=./gre.txt@80   (one word per line, 0-100 baseline)
+#   2. enrich a difficulty band via Bedrock -> S3 Vectors + term index
+#      (the API does this automatically when a learner's band runs low)
+python -m lexicon refill --lo 60 --hi 70 --count 8
+#      when a band has too few candidates, Bedrock suggests new words first
+#      (verified against Datamuse); --no-suggest disables that
+python -m lexicon suggest --lo 80 --hi 90 --count 15   # suggestions only, no enrichment
+python -m lexicon pool    # terms vs pending candidates per band
 
 # Search (filters work on both), and the RAG tutor
 python -m lexicon search "grounding a model in sources" --domain ai --tier advanced

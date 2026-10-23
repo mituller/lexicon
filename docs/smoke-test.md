@@ -51,7 +51,9 @@ aws sts get-caller-identity
 Console → **Bedrock** → region **us-east-1** → **Model access** → enable:
 
 - [ ] `Amazon Titan Text Embeddings V2`
-- [ ] `Amazon Nova Lite`
+- [ ] `Amazon Nova Lite` (tutor, word suggestions)
+- [ ] `Amazon Nova Pro` (batch difficulty rating)
+- [ ] `Anthropic Claude Sonnet 4.6` (writes the stored vocabulary entries)
 
 Verify with the script (makes one tiny embedding call):
 
@@ -126,38 +128,35 @@ in CloudWatch for import errors.
 
 ---
 
-## Stage 6 — Build and ingest the corpus
+## Stage 6 — Grow the vocabulary pool
 
-Offline dry run first (no Bedrock spend):
+Fetch the online word lists into the candidate pool. This calls Datamuse for word frequency
+and Nova Pro to rate difficulty in batches of 50 (about $0.15 for the full ~2,750 words):
 
 ```bash
 cd python
-python -m lexicon build-corpus --out /tmp/dryrun.jsonl --no-generate --limit-per-level 3
+python -m lexicon sync-sources
 ```
 
-- [ ] Writes a handful of records; each has `term_id`, `cefr_level`, `difficulty_tier`,
-      `domain`, `subfield`.
+- [ ] Prints per-source counts (`octanove: ~2090`, `nawl: ~957`) and `N added to the candidate pool`.
+- [ ] Re-running it reports everything as `already known` and adds 0.
 
-Then the real run (calls Bedrock once per word):
+Enrich one band (one Claude Sonnet 4.6 call + one Titan embedding per word):
 
 ```bash
-python -m lexicon build-corpus --out ../data/seed/generated.jsonl --limit-per-level 60
+python -m lexicon refill --lo 60 --hi 70 --count 5
+python -m lexicon pool
 ```
 
-- [ ] Prints `parsed N CEFR-J entries` then `wrote N records`.
-- [ ] Spot-check a few definitions/examples in the output file — they should be plain English
-      appropriate to the CEFR level.
-
-```bash
-python -m lexicon seed ../data/seed/generated.jsonl
-```
-
-- [ ] Prints `embedded and upserted N records`.
+- [ ] Prints `+ [difficulty] word — definition` lines; proper nouns or junk show as `skipped`.
+- [ ] `pool` shows terms in the 60–70 band and fewer pending candidates there.
 - [ ] `python/.venv/bin/python ../scripts/smoke_test.py` now shows `[PASS] Corpus seeded`.
 
-**If build-corpus fails:** `AccessDenied` → Stage 2 not done or IAM missing
-`bedrock:InvokeModel`. **If seed fails:** Stage 3 not done, or the dimension is wrong (index is
+**If refill fails:** `AccessDenied` on Bedrock → Stage 2 not done or IAM missing
+`bedrock:InvokeModel`; on S3 Vectors → Stage 3 not done, or the dimension is wrong (index is
 1024; changing it requires a new index).
+(The new numeric `difficulty` key needs no index change: any key not listed as non-filterable is
+filterable automatically.)
 
 ---
 

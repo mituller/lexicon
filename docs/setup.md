@@ -93,7 +93,7 @@ Python `.env` — boto3 uses your AWS profile from the standard credential chain
 > ⚠️ **This identity is for deploying, not running.** The app authenticates *users* via Cognito,
 > and reaches AWS through the **Lambda execution role** that CDK creates (already
 > least-privilege). When you later reduce this user's access, that only affects deployment and
-> local CLI runs (`build-corpus`, `seed`) — the app keeps working unchanged.
+> local CLI runs (`sync-sources`, `refill`) — the app keeps working unchanged.
 
 ```bash
 cd infra/cdk
@@ -223,7 +223,7 @@ There are **two** identities. Don't confuse them.
 
 ### A. Your deployer identity (you, via AWS CLI / CDK / local Python)
 
-This is the human/role that runs `cdk deploy`, `bootstrap_s3vectors.py`, `build-corpus`, and
+This is the human/role that runs `cdk deploy`, `bootstrap_s3vectors.py`, `sync-sources`/`refill`, and
 `seed`. It needs broad permissions because it creates the whole stack.
 
 > **Simplest:** attach `AdministratorAccess` for setup, then tighten later. CDK bootstrapping
