@@ -7,9 +7,11 @@ Auth is a Cognito JWT; the caller's ``sub`` scopes every read/write.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from pydantic import BaseModel, Field
@@ -22,6 +24,15 @@ from .logging_setup import configure_logging, install_request_logging, json_even
 from .models import ProgressRecord, Rating, SearchHit, UserAggregate, UserList
 from .privacy import build_export
 from .retriever import Retriever
+from .session import (
+    AnswerResult,
+    Exercise,
+    SessionEngine,
+    SessionNotFound,
+    SessionStarted,
+    SessionSummary,
+    StaleExercise,
+)
 from .srs import get_scheduler
 from .tutor_agent import TutorAgent, TutorMode
 from .vectorstore import VectorStore
@@ -58,6 +69,23 @@ class QuizAnswersRequest(BaseModel):
 
 class StartDeckResponse(BaseModel):
     created: int
+
+
+class AnswerRequest(BaseModel):
+    exercise_id: str = Field(min_length=1, max_length=64)
+    choice: int | None = Field(default=None, ge=0, le=10)
+    text: str | None = Field(default=None, max_length=100)
+
+
+class ExplainRequest(BaseModel):
+    exercise_id: str = Field(min_length=1, max_length=64)
+
+
+class NextResponse(BaseModel):
+    """Exactly one is set: the next exercise, or the summary once the session is over."""
+
+    exercise: Exercise | None = None
+    summary: SessionSummary | None = None
 
 
 class ProgressUpdate(BaseModel):
@@ -196,6 +224,41 @@ def create_app() -> FastAPI:
     ) -> dict[str, int]:
         return apply_quiz_results(ProgressStore(), user_id, request.answers)
 
+    # --- adaptive sessions ---
+
+    @app.post("/v1/session")
+    def start_session(user_id: str = Depends(current_user_id)) -> SessionStarted:
+        return SessionEngine().start(user_id)
+
+    @app.get("/v1/session/{session_id}/next")
+    def next_exercise(session_id: str, user_id: str = Depends(current_user_id)) -> NextResponse:
+        with _session_errors():
+            result = SessionEngine().next_exercise(user_id, session_id)
+        if isinstance(result, SessionSummary):
+            return NextResponse(summary=result)
+        return NextResponse(exercise=result)
+
+    @app.post("/v1/session/{session_id}/answer")
+    def answer(
+        session_id: str, request: AnswerRequest, user_id: str = Depends(current_user_id)
+    ) -> AnswerResult:
+        with _session_errors():
+            return SessionEngine().answer(
+                user_id, session_id, request.exercise_id, choice=request.choice, text=request.text
+            )
+
+    @app.post("/v1/session/{session_id}/explain")
+    def explain(
+        session_id: str, request: ExplainRequest, user_id: str = Depends(current_user_id)
+    ) -> dict[str, str]:
+        with _session_errors():
+            return {"explanation": SessionEngine().explain(user_id, session_id, request.exercise_id)}
+
+    @app.post("/v1/pool/prefetch")
+    def prefetch(user_id: str = Depends(current_user_id)) -> dict[str, int]:
+        """Grow the learner's next band; clients call this without awaiting the result."""
+        return {"added": SessionEngine().prefetch(user_id)}
+
     @app.get("/v1/lists")
     def list_lists(user_id: str = Depends(current_user_id)) -> list[UserList]:
         return ProgressStore().list_lists(user_id)
@@ -233,6 +296,16 @@ def create_app() -> FastAPI:
         return server_list
 
     return app
+
+
+@contextmanager
+def _session_errors() -> Iterator[None]:
+    try:
+        yield
+    except SessionNotFound as error:
+        raise HTTPException(status_code=404, detail="session not found") from error
+    except StaleExercise as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 app = create_app()

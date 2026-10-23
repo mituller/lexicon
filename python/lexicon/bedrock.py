@@ -68,6 +68,7 @@ class BedrockClient:
         system: str | None = None,
         model_id: str | None = None,
         max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Generate a completion (non-streaming); defaults to the configured generation model."""
         settings = get_settings()
@@ -77,7 +78,9 @@ class BedrockClient:
             "messages": messages,
             "inferenceConfig": {
                 "maxTokens": max_tokens or settings.generation_max_tokens,
-                "temperature": settings.generation_temperature,
+                "temperature": (
+                    settings.generation_temperature if temperature is None else temperature
+                ),
             },
         }
         if system:

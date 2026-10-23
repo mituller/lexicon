@@ -246,6 +246,23 @@ class VectorStore:
             out.extend(response.get("vectors", []))
         return out
 
+    def get_embeddings(self, keys: Sequence[str]) -> dict[str, list[float]]:
+        """Stored embeddings by key (used to find neighbours of a known term)."""
+        if not keys:
+            return {}
+        response = self._client.get_vectors(
+            vectorBucketName=self.bucket,
+            indexName=self.index,
+            keys=list(keys),
+            returnData=True,
+            returnMetadata=False,
+        )
+        return {
+            item["key"]: list(item["data"]["float32"])
+            for item in response.get("vectors", [])
+            if item.get("data", {}).get("float32")
+        }
+
     # --- reads ---
 
     def query(

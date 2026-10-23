@@ -22,6 +22,25 @@ Bedrock generation dominates latency, so Python's Lambda cold start is negligibl
 is the reference SDK for S3 Vectors and Bedrock. Rust stays a thin shell so business logic is
 easy to read and change. See `prompt.md` §1a (L1, L15–L19).
 
+## How studying works
+
+A session (`python/lexicon/session.py`) mixes due reviews with ~6 new words just above the
+learner's **level**, a 0–100 estimate updated Elo-style from each word's first answer (with
+multiple-choice guessing discounted). Exercises get harder as a word gets stronger: pick the
+definition → pick the word → fill the blank (fresh Nova Pro sentence) → type the word. Wrong
+options come from the word's S3 Vectors neighbours (synonyms excluded, same part of speech
+first). A new word answered correctly on sight must be confirmed by typing before it counts as
+known; a miss is rated *Again* once in FSRS and comes back three cards later as a different
+exercise until it's right. Grading happens server-side; the answer key never reaches the client.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /v1/session` | start a session → `session_id`, review/new counts, level |
+| `GET /v1/session/{id}/next` | next exercise (no answer), or the summary when done |
+| `POST /v1/session/{id}/answer` | `{exercise_id, choice \| text}` → correct?, full entry, next step |
+| `POST /v1/session/{id}/explain` | why the chosen answer was wrong (generated once, cached) |
+| `POST /v1/pool/prefetch` | grow the learner's next band; call without awaiting |
+
 ## Repo layout
 
 ```

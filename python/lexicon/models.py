@@ -216,6 +216,10 @@ class UserAggregate(BaseModel):
     total_learned: int = 0
     due_today: int = 0
     total_xp: int = 0
+    # Estimated vocabulary level on the 0-100 difficulty scale (None until the first session);
+    # updated Elo-style by session.update_level.
+    level: float | None = None
+    level_updates: int = 0
 
 
 class UserList(BaseModel):

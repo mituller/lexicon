@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Batch-rates pooled words (~50 per call). Nova Pro ranks them almost exactly like Sonnet
     # (rank correlation 0.95 on a 50-word sample) at ~1/5 the cost.
     rate_model_id: str = "us.amazon.nova-pro-v1:0"
+    # Writes fill-in-the-blank sentences and explains wrong answers. In testing Lite gave vague
+    # or wrong explanations and sentences where a distractor also fit.
+    exercise_model_id: str = "us.amazon.nova-pro-v1:0"
 
     # --- DynamoDB ---
     dynamodb_table: str = "lexicon"

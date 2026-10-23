@@ -91,6 +91,8 @@ class LexiconStack(Stack):
             partition_key=dynamodb.Attribute(name="PK", type=dynamodb.AttributeType.STRING),
             sort_key=dynamodb.Attribute(name="SK", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            # Study sessions (SK SESSION#...) carry a ttl so abandoned ones expire.
+            time_to_live_attribute="ttl",
             point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
                 point_in_time_recovery_enabled=True
             ),
