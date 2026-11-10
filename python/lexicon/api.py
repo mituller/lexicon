@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from pydantic import BaseModel, Field
@@ -20,8 +20,11 @@ from .auth import current_user_id
 from .config import get_settings
 from .decks import DeckService, DeckSummary, DueTerm, Quiz, apply_quiz_results
 from .dynamo import ProgressStore
+from .importer import ImportFailed, ImportRequest, ImportResult, WordImporter
+from .lesson import Lesson, LessonService
 from .logging_setup import configure_logging, install_request_logging, json_event
 from .models import ProgressRecord, Rating, SearchHit, UserAggregate, UserList
+from .overview import Overview, build_overview, struggling_ids
 from .privacy import build_export
 from .retriever import Retriever
 from .session import (
@@ -33,7 +36,9 @@ from .session import (
     SessionSummary,
     StaleExercise,
 )
+from .speech import pronounce
 from .srs import get_scheduler
+from .termindex import TermIndex
 from .tutor_agent import TutorAgent, TutorMode
 from .vectorstore import VectorStore
 
@@ -74,7 +79,7 @@ class StartDeckResponse(BaseModel):
 class AnswerRequest(BaseModel):
     exercise_id: str = Field(min_length=1, max_length=64)
     choice: int | None = Field(default=None, ge=0, le=10)
-    text: str | None = Field(default=None, max_length=100)
+    text: str | None = Field(default=None, max_length=500)  # typed word or a whole sentence
 
 
 class ExplainRequest(BaseModel):
@@ -253,6 +258,46 @@ def create_app() -> FastAPI:
     ) -> dict[str, str]:
         with _session_errors():
             return {"explanation": SessionEngine().explain(user_id, session_id, request.exercise_id)}
+
+    @app.post("/v1/session/{session_id}/lesson")
+    def lesson(
+        session_id: str, request: ExplainRequest, user_id: str = Depends(current_user_id)
+    ) -> Lesson:
+        """Teaching card for the word behind an answered exercise (written once per word)."""
+        with _session_errors():
+            term_id = SessionEngine().graded_term_id(user_id, session_id, request.exercise_id)
+        found = LessonService().lesson(term_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="word not found")
+        return found
+
+    @app.get("/v1/pronounce")
+    def pronunciation(
+        word: str = Query(min_length=1, max_length=60, pattern=r"^[A-Za-z][A-Za-z' -]*$"),
+        _: str = Depends(current_user_id),
+    ) -> dict[str, str]:
+        """Base64 MP3 of the word, spoken by Amazon Polly."""
+        return {"audio": pronounce(word), "format": "mp3"}
+
+    @app.post("/v1/import")
+    def import_words(request: ImportRequest, user_id: str = Depends(current_user_id)) -> ImportResult:
+        """Pick words worth learning out of the learner's own reading and queue them."""
+        level = ProgressStore().get_aggregate(user_id).level
+        try:
+            return WordImporter().run(user_id, request, level=level if level is not None else 40.0)
+        except ImportFailed as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/v1/overview")
+    def overview(user_id: str = Depends(current_user_id)) -> Overview:
+        store = ProgressStore()
+        records = store.list_progress(user_id)
+        seen = {r.term_id for r in records}
+        terms = TermIndex().get_terms(struggling_ids(records))
+        return build_overview(
+            store.get_aggregate(user_id), records, terms,
+            queued=sum(1 for w in store.list_queued(user_id) if w.term_id not in seen),
+        )
 
     @app.post("/v1/pool/prefetch")
     def prefetch(user_id: str = Depends(current_user_id)) -> dict[str, int]:

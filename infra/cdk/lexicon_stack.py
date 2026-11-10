@@ -275,6 +275,11 @@ class LexiconStack(Stack):
             )
         )
 
+        # Polly: pronunciation audio (SynthesizeSpeech has no resource-level scoping).
+        function.add_to_role_policy(
+            iam.PolicyStatement(actions=["polly:SynthesizeSpeech"], resources=["*"])
+        )
+
         # S3 Vectors: scoped to this bucket and its indexes.
         vector_bucket_arn = (
             f"arn:aws:s3vectors:{self.region}:{self.account}:bucket/{VECTOR_BUCKET}"

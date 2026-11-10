@@ -91,4 +91,32 @@ def test_session_errors_map_to_http_status() -> None:
 
 def test_session_answer_validates_input() -> None:
     assert client.post("/v1/session/s1/answer", json={"choice": 1}).status_code == 422
-    assert client.post("/v1/session/s1/answer", json={"exercise_id": "e", "text": "x" * 101}).status_code == 422
+    assert client.post("/v1/session/s1/answer", json={"exercise_id": "e", "text": "x" * 501}).status_code == 422
+
+
+def test_pronounce_rejects_non_words(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("lexicon.api.pronounce", lambda word: "QUJD")
+    assert client.get("/v1/pronounce", params={"word": "laconic"}).json() == {"audio": "QUJD", "format": "mp3"}
+    assert client.get("/v1/pronounce", params={"word": "<script>"}).status_code == 422
+    assert client.get("/v1/pronounce", params={"word": "x" * 61}).status_code == 422
+
+
+def test_import_reports_bad_input_as_422(monkeypatch: pytest.MonkeyPatch) -> None:
+    from lexicon.importer import ImportFailed
+
+    class Store:
+        def get_aggregate(self, user_id: str):
+            from lexicon.models import UserAggregate
+
+            return UserAggregate(user_id=user_id, level=55)
+
+    class Importer:
+        def run(self, user_id, request, *, level):
+            assert level == 55
+            raise ImportFailed("There isn't enough text to pick words from.")
+
+    monkeypatch.setattr("lexicon.api.ProgressStore", Store)
+    monkeypatch.setattr("lexicon.api.WordImporter", Importer)
+    response = client.post("/v1/import", json={"text": "hi"})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "There isn't enough text to pick words from."

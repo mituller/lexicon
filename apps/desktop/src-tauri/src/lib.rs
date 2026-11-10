@@ -146,6 +146,82 @@ async fn grade_quiz(request: Value) -> Result<Value, String> {
     call_api(reqwest::Method::POST, "/v1/quiz/grade", Some(request)).await
 }
 
+// --- adaptive sessions (passthrough; grading happens in the Python API) ---
+
+/// Session ids are server-generated hex; reject anything else before it reaches a URL path.
+fn session_path(session_id: &str, action: &str) -> Result<String, String> {
+    if session_id.is_empty() || !session_id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("invalid session id".to_string());
+    }
+    Ok(format!("/v1/session/{session_id}/{action}"))
+}
+
+#[tauri::command]
+async fn start_session() -> Result<Value, String> {
+    call_api(reqwest::Method::POST, "/v1/session", None).await
+}
+
+#[tauri::command]
+async fn next_exercise(session_id: String) -> Result<Value, String> {
+    call_api(
+        reqwest::Method::GET,
+        &session_path(&session_id, "next")?,
+        None,
+    )
+    .await
+}
+
+#[tauri::command]
+async fn answer_exercise(session_id: String, request: Value) -> Result<Value, String> {
+    call_api(
+        reqwest::Method::POST,
+        &session_path(&session_id, "answer")?,
+        Some(request),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn explain_answer(session_id: String, request: Value) -> Result<Value, String> {
+    call_api(
+        reqwest::Method::POST,
+        &session_path(&session_id, "explain")?,
+        Some(request),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn lesson(session_id: String, request: Value) -> Result<Value, String> {
+    call_api(
+        reqwest::Method::POST,
+        &session_path(&session_id, "lesson")?,
+        Some(request),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn pronounce(word: String) -> Result<Value, String> {
+    let path = format!("/v1/pronounce?word={}", urlencoding::encode(&word));
+    call_api(reqwest::Method::GET, &path, None).await
+}
+
+#[tauri::command]
+async fn import_words(request: Value) -> Result<Value, String> {
+    call_api(reqwest::Method::POST, "/v1/import", Some(request)).await
+}
+
+#[tauri::command]
+async fn overview() -> Result<Value, String> {
+    call_api(reqwest::Method::GET, "/v1/overview", None).await
+}
+
+#[tauri::command]
+async fn prefetch_pool() -> Result<Value, String> {
+    call_api(reqwest::Method::POST, "/v1/pool/prefetch", None).await
+}
+
 #[tauri::command]
 fn store_token(token: String) {
     if let Ok(mut cache) = TOKEN.lock() {
@@ -323,8 +399,14 @@ pub fn run() {
             let db_path = data_dir.join("lexicon.db");
             store::init(&db_path).map_err(Box::<dyn std::error::Error>::from)?;
             secrets::init(data_dir);
+            // Dev tools stay closed at start (right-click → Inspect still works in debug builds);
+            // set LEXICON_DEVTOOLS=1 to open them automatically.
             #[cfg(debug_assertions)]
-            app.get_webview_window("main").unwrap().open_devtools();
+            if std::env::var("LEXICON_DEVTOOLS").is_ok_and(|v| v == "1") {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -345,6 +427,15 @@ pub fn run() {
             review_due,
             quiz,
             grade_quiz,
+            start_session,
+            next_exercise,
+            answer_exercise,
+            explain_answer,
+            lesson,
+            pronounce,
+            import_words,
+            overview,
+            prefetch_pool,
             cached_progress,
             sync_progress,
             local_review,
@@ -356,4 +447,20 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lexicon");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::session_path;
+
+    #[test]
+    fn session_path_accepts_server_ids_only() {
+        assert_eq!(
+            session_path("bf4fd63dbf06", "next").unwrap(),
+            "/v1/session/bf4fd63dbf06/next"
+        );
+        assert!(session_path("", "next").is_err());
+        assert!(session_path("../progress", "next").is_err());
+        assert!(session_path("abc?x=1", "answer").is_err());
+    }
 }

@@ -6,6 +6,8 @@
   --text: #e7e9ee;
   --muted: #9aa3b2;
   --accent: #7c9cff;
+  --right: #6fdc9b;
+  --wrong: #ff8a8a;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -176,7 +178,7 @@ button.primary {
 }
 
 .error {
-  color: #ff8a8a;
+  color: var(--wrong);
 }
 
 .pending {
@@ -208,93 +210,29 @@ button.primary {
   font-weight: 600;
 }
 
-/* Decks */
-.decks {
-  list-style: none;
-  margin: 1rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 0.75rem;
+/* Study session */
+.home {
+  text-align: center;
+  padding: 2.5rem 1.25rem;
 }
 
-.deck {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.9rem;
+button.big {
+  font-size: 1.1rem;
+  padding: 0.8rem 1.6rem;
+  margin: 1rem 0 0.5rem;
 }
 
-.deck-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.deck-title {
-  font-weight: 600;
-}
-
-.deck-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-/* Flashcard */
 .progress-line {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
   color: var(--muted);
   margin-bottom: 1rem;
 }
 
-.card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  width: 100%;
-  min-height: 220px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: #0d0f15;
-  color: var(--text);
-  cursor: pointer;
-  padding: 1.5rem;
-  text-align: center;
-}
-
-.card-front {
-  font-size: 1.6rem;
-  font-weight: 600;
-}
-
-.card-back {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.card .definition {
-  font-size: 1.05rem;
-}
-
-.hint {
-  margin-top: 0.5rem;
-}
-
-.card.revealed {
-  cursor: default;
-}
-
-.rate-prompt {
-  margin: 1rem 0 0.5rem;
-  color: var(--muted);
+.progress-line .badge {
+  margin-left: 0.5rem;
 }
 
 .ghost {
@@ -303,33 +241,337 @@ button.primary {
   font-size: 0.8rem;
 }
 
-/* Quiz */
-.quiz-question {
+.instruction {
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}
+
+.prompt-term {
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin: 0.5rem 0 1rem;
+}
+
+.prompt-definition,
+.prompt-sentence {
+  font-size: 1.15rem;
+  line-height: 1.5;
+  margin: 0.5rem 0 1rem;
+}
+
+.blank {
+  display: inline-block;
+  width: 5.5em;
+  border-bottom: 2px solid var(--accent);
+  margin: 0 0.25em;
+}
+
+.options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.option {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.option:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.option .key {
+  color: var(--muted);
+  font-size: 0.8rem;
+  min-width: 1em;
+}
+
+.option.right {
+  border-color: var(--right);
+  opacity: 1;
+}
+
+.option.wrong {
+  border-color: var(--wrong);
+  opacity: 1;
+}
+
+.typed {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.feedback {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+
+.verdict {
+  font-weight: 600;
+  margin: 0;
+}
+
+.is-right .verdict {
+  color: var(--right);
+}
+
+.is-wrong .verdict {
+  color: var(--wrong);
+}
+
+.feedback > .muted {
+  margin: -0.5rem 0 0;
+}
+
+.entry {
+  width: 100%;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.9rem;
-  margin: 0.75rem 0;
 }
 
-.quiz-question .term {
-  font-weight: 600;
-  font-size: 1.05rem;
+.entry p {
+  margin: 0.3rem 0;
 }
 
-.quiz-option {
-  display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
-  padding: 0.35rem 0;
+.explain p,
+.tutor-answer {
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.tutor {
+  width: 100%;
+}
+
+.tutor summary {
   cursor: pointer;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
 }
 
-.quiz-option .chosen {
-  color: var(--accent);
+/* --- sentence writing, nudges, lessons, pronunciation --- */
+
+textarea.search-input {
+  resize: vertical;
+  font: inherit;
+  line-height: 1.4;
+}
+
+.typed.sentence {
+  align-items: flex-end;
+}
+
+.nudge {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+}
+
+.attribution {
+  font-size: 0.8rem;
+  margin-top: -0.25rem;
+}
+
+.prompt-term .pos {
+  font-size: 0.9rem;
+  font-weight: 400;
+  margin-left: 0.5rem;
+}
+
+.speak {
+  border: none;
+  background: none;
+  padding: 0 0.25rem;
+  font-size: 0.9em;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.grader {
+  margin: 0.5rem 0;
+}
+
+.improved {
+  margin: 0.25rem 0 0.75rem;
+  font-style: italic;
+}
+
+.lesson {
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+
+.lesson p {
+  margin: 0.35rem 0;
+}
+
+.lesson-title {
   font-weight: 600;
 }
 
-.score {
-  font-size: 1.5rem;
+.ipa {
+  font-weight: 400;
+  margin-left: 0.5rem;
+}
+
+.met-in {
+  font-size: 0.95rem;
+}
+
+/* --- add words --- */
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 0.5rem 0 1rem;
+}
+
+.segmented button {
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.segmented button.active {
+  background: var(--accent);
+  color: #0f1117;
+}
+
+.import-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.import-form .search-input {
+  width: 100%;
+}
+
+.word-list {
+  list-style: none;
+  padding: 0;
+}
+
+.word-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.word-list .example {
+  margin: 0.25rem 0 0;
+}
+
+/* --- progress charts (single series: accent mark, text in text tokens) --- */
+
+.progress-page h3 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.chart {
+  position: relative;
+  margin: 0;
+}
+
+.chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.chart .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart .crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.chart .axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.chart .value {
+  fill: var(--text);
+  font-size: 12px;
   font-weight: 600;
+}
+
+.chart .line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart .area {
+  fill: var(--accent);
+  opacity: 0.1;
+}
+
+.chart .dot {
+  fill: var(--accent);
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.chart .bar {
+  fill: var(--accent);
+}
+
+.chart .hit {
+  fill: transparent;
+}
+
+.chart .tooltip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0.3rem 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.table-view {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.table-view table {
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+.table-view th,
+.table-view td {
+  padding: 0.2rem 1rem 0.2rem 0;
+  text-align: left;
 }

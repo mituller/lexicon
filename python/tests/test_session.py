@@ -5,7 +5,15 @@ from typing import Any
 
 import pytest
 
-from lexicon.models import CardState, ProgressRecord, Rating, TermRecord, UserAggregate, utcnow
+from lexicon.models import (
+    CardState,
+    ProgressRecord,
+    QueuedWord,
+    Rating,
+    TermRecord,
+    UserAggregate,
+    utcnow,
+)
 from lexicon.session import (
     CONFIRM_GAP,
     MAX_ATTEMPTS,
@@ -58,6 +66,7 @@ class FakeProgress:
         self.aggregate = UserAggregate(user_id=USER)
         self.reviews: list[tuple[str, int]] = []
         self.recomputed = 0
+        self.queued: list[QueuedWord] = []
 
     def get_aggregate(self, user_id: str) -> UserAggregate:
         return self.aggregate.model_copy()
@@ -79,6 +88,12 @@ class FakeProgress:
         self.reviews.append((record.term_id, int(record.last_rating or 0)))
         self.records[record.term_id] = record
 
+    def list_queued(self, user_id: str) -> list[QueuedWord]:
+        return list(self.queued)
+
+    def unqueue(self, user_id: str, term_ids: list[str]) -> None:
+        self.queued = [w for w in self.queued if w.term_id not in term_ids]
+
 
 class FakeTerms:
     def __init__(self, terms: list[TermRecord]) -> None:
@@ -90,16 +105,36 @@ class FakeTerms:
     def get_terms(self, ids: list[str]) -> dict[str, TermRecord]:
         return {i: self.terms[i] for i in ids if i in self.terms}
 
+    def put_term(self, term: TermRecord) -> None:
+        self.terms[term.term_id] = term
+
 
 class FakeVectors:
-    """Neighbours = every other term ordered by difficulty distance."""
+    """Neighbours = every other term ordered by difficulty distance.
+
+    Embeddings are [difficulty, one-hot position * 100], so distinct terms are dissimilar
+    (cosine ~0.2) unless a test overrides ``similar``.
+    """
 
     def __init__(self, terms: FakeTerms) -> None:
         self.terms = terms
         self.queries: list[dict[str, Any]] = []
 
+    similar: set[frozenset[str]] = set()
+
     def get_embeddings(self, keys: list[str]) -> dict[str, list[float]]:
-        return {k: [float(self.terms.terms[k].difficulty)] for k in keys if k in self.terms.terms}
+        ids = sorted(self.terms.terms)
+        out: dict[str, list[float]] = {}
+        for k in keys:
+            if k not in self.terms.terms:
+                continue
+            vector = [float(self.terms.terms[k].difficulty)] + [0.0] * len(ids)
+            vector[1 + ids.index(k)] = 100.0
+            for pair in self.similar:  # pairs marked similar share a dimension
+                if k in pair:
+                    vector[1 + ids.index(min(pair))] = 100.0
+            out[k] = vector
+        return out
 
     def query(self, vector: list[float], *, top_k: int, filter: dict, return_metadata: bool = True):
         self.queries.append(filter)
@@ -161,6 +196,7 @@ def make_engine(records=None, words=WORDS, extra=None):
     engine = SessionEngine(
         progress=progress, terms=terms, vectors=FakeVectors(terms), bedrock=FakeBedrock(),  # type: ignore[arg-type]
         pool=pool, sessions=sessions, rng=random.Random(3),  # type: ignore[arg-type]
+        quotations=lambda word, **_: [],
     )
     return engine, progress, sessions, pool
 
@@ -327,7 +363,7 @@ def test_new_word_known_on_sight_is_confirmed_by_typing_then_rated_easy() -> Non
         seen_types.append(exercise.type)
         answer_right(engine, sessions, sid, exercise)
     confirm = engine.next_exercise(USER, sid)
-    assert confirm.type is ExerciseType.TYPE_WORD and confirm.hint
+    assert confirm.type is ExerciseType.TYPE_WORD and confirm.hint and confirm.stage == "confirm"
     assert SessionState.model_validate_json(sessions.saved[sid]).current.term_id == target  # type: ignore[union-attr]
     assert answer_right(engine, sessions, sid, confirm).next_step == "done"
     assert (target, int(Rating.EASY)) in progress.reviews
@@ -351,7 +387,7 @@ def test_missed_word_is_rated_again_once_and_requeued_as_a_different_type() -> N
     retry = engine.next_exercise(USER, sid)
     assert SessionState.model_validate_json(sessions.saved[sid]).current.term_id == target  # type: ignore[union-attr]
     assert retry.type is not ExerciseType.CHOOSE_DEFINITION
-    assert retry.attempt == 2
+    assert retry.attempt == 2 and retry.stage == "retry"
 
     level = progress.aggregate.level
     answer_wrong(engine, sessions, sid, retry)  # second miss: no extra FSRS write, no level change
@@ -493,3 +529,205 @@ def test_cloze_falls_back_to_stored_examples() -> None:
     engine, *_ = make_engine()
     engine._bedrock.generate = lambda prompt, **_: "not json"  # type: ignore[method-assign]
     assert engine.cloze_sentence(WORDS[0]) in {"She was _____ about it.", "A rather _____ remark."}
+
+
+# --- spacing new words (no near-synonyms in one session) ---
+
+
+def test_new_words_skip_near_synonyms_of_each_other() -> None:
+    # laconic lists terse as a synonym; pithy and laconic are made similar by embedding.
+    engine, *_ = make_engine()
+    engine._vectors.similar = {frozenset({"t_laconic", "t_pithy"})}  # type: ignore[attr-defined]
+    picked = engine.pick_new_words(USER, 44, [], count=4)
+    assert len(picked) == 4
+    assert not {"t_laconic", "t_terse"} <= set(picked)
+    assert not {"t_laconic", "t_pithy"} <= set(picked)
+    assert not {"t_laconic", "t_laconically"} <= set(picked)  # same family
+
+
+def test_spacing_fills_the_session_when_everything_is_close() -> None:
+    from lexicon.session import spread_out
+
+    a, b = term("a", "terse", 50, synonyms=["laconic"]), term("b", "laconic", 50)
+    assert spread_out([a, b], 2, {}) == ["a", "b"]
+    assert spread_out([a, b], 1, {}) == ["a"]
+
+
+def test_new_words_avoid_words_still_being_learned_this_session() -> None:
+    learning = ProgressRecord(user_id=USER, term_id="t_terse", state=CardState.LEARNING, due=utcnow())
+    engine, *_ = make_engine(records=[learning])
+    picked = engine.pick_new_words(USER, 44, [learning], count=3, due=[learning])
+    assert "t_laconic" not in picked  # its synonym "terse" is being relearned right now
+
+
+# --- imported words ---
+
+
+def test_imported_words_come_first_and_carry_their_context() -> None:
+    engine, progress, sessions, _ = make_engine()
+    progress.queued = [QueuedWord(term_id="t_halcyon", context="Those halcyon summers.")]
+    sid = engine.start(USER, new_words=2).session_id
+    state = SessionState.model_validate_json(sessions.saved[sid])
+    halcyon = next(i for i in state.items if i.term_id == "t_halcyon")
+    assert halcyon.context == "Those halcyon summers."
+    exercise = engine.next_exercise(USER, sid)
+    while state.items[state.queue[0]].term_id != "t_halcyon":
+        answer_right(engine, sessions, sid, exercise)
+        exercise = engine.next_exercise(USER, sid)
+        state = SessionState.model_validate_json(sessions.saved[sid])
+    result = answer_wrong(engine, sessions, sid, exercise)
+    assert result.entry is not None and result.entry.met_in == "Those halcyon summers."
+
+
+def test_studied_imports_leave_the_queue() -> None:
+    seen = ProgressRecord(user_id=USER, term_id="t_halcyon", due=utcnow() + timedelta(days=3))
+    engine, progress, *_ = make_engine(records=[seen])
+    progress.queued = [QueuedWord(term_id="t_halcyon")]
+    engine.pick_new_words(USER, 44, [seen], count=2)
+    assert progress.queued == []
+
+
+# --- exercise progression ---
+
+
+@pytest.mark.parametrize(
+    ("stability", "reps", "has_synonyms", "expected"),
+    [
+        (12.0, 1, True, ExerciseType.NUANCE),
+        (12.0, 1, False, ExerciseType.CLOZE),
+        (12.0, 2, True, ExerciseType.CLOZE),
+        (45.0, 1, False, ExerciseType.USE_WORD),
+        (45.0, 2, False, ExerciseType.TYPE_WORD),
+    ],
+)
+def test_mature_reviews_alternate_harder_exercises(stability, reps, has_synonyms, expected) -> None:
+    record = ProgressRecord(user_id=USER, term_id="x", state=CardState.REVIEW, stability=stability, reps=reps)
+    item = SessionItem(term_id="x", kind="review")
+    assert SessionEngine.choose_type(item, record, has_synonyms=has_synonyms) is expected
+
+
+def review_engine(stability: float, reps: int, words=WORDS, word_id: str = "t_laconic"):
+    record = ProgressRecord(
+        user_id=USER, term_id=word_id, state=CardState.REVIEW, stability=stability, reps=reps,
+        difficulty=5.0, due=utcnow() - timedelta(hours=1), last_review=utcnow() - timedelta(days=10),
+    )
+    engine, progress, sessions, pool = make_engine(records=[record], words=words)
+    sid = engine.start(USER, new_words=0).session_id
+    return engine, progress, sessions, sid, engine.next_exercise(USER, sid)
+
+
+def test_well_known_words_lose_the_first_letter_hint() -> None:
+    *_, exercise = review_engine(80.0, 2)
+    assert exercise.type is ExerciseType.TYPE_WORD and exercise.hint == "7 letters"
+    *_, exercise = review_engine(40.0, 2)
+    assert exercise.hint == "l… (7 letters)"
+
+
+def test_typing_a_synonym_gets_one_ungraded_retry() -> None:
+    engine, progress, sessions, sid, exercise = review_engine(40.0, 2)
+    nudge = engine.answer(USER, sid, exercise.exercise_id, text="Terse")
+    assert nudge.next_step == "retry" and nudge.entry is None and "near-synonym" in nudge.nudge
+    assert progress.reviews == []  # nothing graded
+    final = engine.answer(USER, sid, exercise.exercise_id, text="terse")
+    assert not final.correct and final.next_step == "requeued"
+
+
+def test_nuance_exercise_offers_the_word_and_its_synonyms() -> None:
+    engine, _, sessions, sid, _ = review_engine(12.0, 1)
+    engine._bedrock.generate = lambda prompt, **_: json.dumps(  # type: ignore[method-assign]
+        {"sentence": "His laconic reply hid how much he cared.", "why": "Laconic suggests restraint."}
+    )
+    state = SessionState.model_validate_json(sessions.saved[sid])
+    state.current = None
+    sessions.put(state)
+    exercise = engine.next_exercise(USER, sid)
+    assert exercise.type is ExerciseType.NUANCE
+    assert sorted(exercise.options) == ["laconic", "terse"]
+    assert exercise.prompt == "His _____ reply hid how much he cared."
+    result = answer_right(engine, sessions, sid, exercise)
+    assert result.correct and result.feedback == "Laconic suggests restraint."
+
+
+def test_nuance_falls_back_to_cloze_when_the_sentence_names_a_rival() -> None:
+    engine, _, sessions, sid, _ = review_engine(12.0, 1)
+    engine._bedrock.generate = lambda prompt, **_: json.dumps(  # type: ignore[method-assign]
+        {"sentence": "His laconic, even terse, reply.", "why": "x"}
+    ) if "Near-synonyms" in prompt else json.dumps({"sentence": "Her laconic answer ended the meeting early."})
+    state = SessionState.model_validate_json(sessions.saved[sid])
+    state.current = None
+    sessions.put(state)
+    assert engine.next_exercise(USER, sid).type is ExerciseType.CLOZE
+
+
+def test_use_word_requires_the_word_then_grades_the_sentence() -> None:
+    engine, progress, sessions, sid, exercise = review_engine(45.0, 1)
+    assert exercise.type is ExerciseType.USE_WORD and exercise.prompt == "laconic"
+    nudge = engine.answer(USER, sid, exercise.exercise_id, text="He said very little at dinner.")
+    assert nudge.next_step == "retry" and "laconic" in nudge.nudge
+    engine._bedrock.generate = lambda prompt, **_: json.dumps(  # type: ignore[method-assign]
+        {"verdict": "partly", "feedback": "Close.", "improved": "His laconic reply said it all."}
+    )
+    result = engine.answer(USER, sid, exercise.exercise_id, text="He was laconic with the reply.")
+    assert result.correct and result.typo and result.feedback == "Close."
+    assert result.improved == "His laconic reply said it all."
+    assert progress.reviews[-1] == ("t_laconic", int(Rating.HARD))
+
+
+def test_use_word_grading_failure_is_lenient() -> None:
+    engine, progress, sessions, sid, exercise = review_engine(45.0, 1)
+    engine._bedrock.generate = lambda prompt, **_: "not json"  # type: ignore[method-assign]
+    result = engine.answer(USER, sid, exercise.exercise_id, text="She gave a laconic nod and left.")
+    assert result.correct and result.typo
+
+
+def test_parse_usage_rejects_unknown_verdicts() -> None:
+    from lexicon.session import parse_usage
+
+    assert parse_usage('{"verdict": "Correct"}').verdict == "correct"
+    with pytest.raises(ValueError):
+        parse_usage('{"verdict": "great"}')
+
+
+# --- real usage sentences ---
+
+
+def test_cloze_can_use_a_real_quotation_and_caches_the_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("lexicon.session.QUOTATION_SHARE", 1.0)
+    engine, _, sessions, sid, _ = review_engine(12.0, 2)
+    calls: list[str] = []
+
+    def quotes(word: str, **_: Any) -> list[str]:
+        calls.append(word)
+        return ["The senator, famously laconic, answered every question with a single word."]
+
+    engine._quotations = quotes  # type: ignore[assignment]
+    engine._terms.terms["t_laconic"] = WORDS[0]  # type: ignore[attr-defined]  # forget the first lookup
+    state = SessionState.model_validate_json(sessions.saved[sid])
+    state.current = None
+    sessions.put(state)
+    exercise = engine.next_exercise(USER, sid)
+    assert exercise.type is ExerciseType.CLOZE
+    assert exercise.prompt.startswith("The senator, famously _____,")
+    assert exercise.hint == "Real usage, via Wiktionary"
+    assert engine._terms.terms["t_laconic"].quotations_checked  # type: ignore[attr-defined]
+    engine.usage_sentence(engine._terms.terms["t_laconic"])  # type: ignore[attr-defined]
+    assert calls == ["laconic"]
+
+
+# --- level history ---
+
+
+def test_level_history_keeps_one_point_per_day() -> None:
+    aggregate = UserAggregate(user_id=USER, level=50)
+    aggregate.record_level(today="2026-11-01")
+    aggregate.level = 52
+    aggregate.record_level(today="2026-11-01")
+    aggregate.record_level(today="2026-11-02")
+    assert [(p.date, p.level) for p in aggregate.level_history] == [("2026-11-01", 52), ("2026-11-02", 52)]
+
+
+def test_answering_records_the_level() -> None:
+    engine, progress, sessions, _ = make_engine()
+    sid = engine.start(USER, new_words=1).session_id
+    answer_right(engine, sessions, sid, engine.next_exercise(USER, sid))
+    assert len(progress.aggregate.level_history) == 1

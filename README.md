@@ -26,12 +26,25 @@ easy to read and change. See `prompt.md` §1a (L1, L15–L19).
 
 A session (`python/lexicon/session.py`) mixes due reviews with ~6 new words just above the
 learner's **level**, a 0–100 estimate updated Elo-style from each word's first answer (with
-multiple-choice guessing discounted). Exercises get harder as a word gets stronger: pick the
-definition → pick the word → fill the blank (fresh Nova Pro sentence) → type the word. Wrong
+multiple-choice guessing discounted). Words the learner **imported from their own reading**
+(paste text or a link on the *Add words* tab) come first. New words are **spaced out**: two
+near-synonyms (listed synonyms, same word family, or Titan cosine ≥ 0.6) are never introduced in
+the same session, because words learned together that mean nearly the same thing interfere.
+
+Exercises get harder as a word gets stronger: pick the definition → pick the word → fill the
+blank or **which near-synonym fits** → type the word (only the letter count as a hint once it's
+well known) or **write your own sentence**, graded by Nova Pro (correct / partly / incorrect, with
+a corrected version). Half of the fill-the-blank sentences come from **real usage**
+(Wiktionary, attributed) when the word has any; the rest are fresh Nova Pro sentences. Wrong
 options come from the word's S3 Vectors neighbours (synonyms excluded, same part of speech
-first). A new word answered correctly on sight must be confirmed by typing before it counts as
-known; a miss is rated *Again* once in FSRS and comes back three cards later as a different
-exercise until it's right. Grading happens server-side; the answer key never reaches the client.
+first). Typing a near-synonym instead of the word gets one ungraded retry.
+
+A new word answered correctly on sight must be confirmed by typing before it counts as known; a
+miss is rated *Again* once in FSRS, shows a **teaching card** (IPA, word parts, a memory hook;
+written once per word by Sonnet), and comes back three cards later as a different exercise until
+it's right. Every entry has **pronunciation audio** (Amazon Polly). Grading happens server-side;
+the answer key never reaches the client. The *Progress* tab shows level over time, reviews due
+in the next week, and the words that keep slipping.
 
 | Endpoint | Purpose |
 |---|---|
@@ -39,6 +52,10 @@ exercise until it's right. Grading happens server-side; the answer key never rea
 | `GET /v1/session/{id}/next` | next exercise (no answer), or the summary when done |
 | `POST /v1/session/{id}/answer` | `{exercise_id, choice \| text}` → correct?, full entry, next step |
 | `POST /v1/session/{id}/explain` | why the chosen answer was wrong (generated once, cached) |
+| `POST /v1/session/{id}/lesson` | teaching card for a missed word |
+| `GET /v1/pronounce?word=` | base64 MP3 from Polly |
+| `POST /v1/import` | `{text \| url}` → words picked from the learner's reading, queued |
+| `GET /v1/overview` | level history, due forecast, struggling words |
 | `POST /v1/pool/prefetch` | grow the learner's next band; call without awaiting |
 
 ## Repo layout

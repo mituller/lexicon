@@ -4,14 +4,19 @@
 
 import { getIdToken as getWebIdToken } from "./auth";
 import type {
-  DeckSummary,
-  DueTerm,
+  AnswerRequest,
+  AnswerResult,
+  ImportRequest,
+  ImportResult,
+  Lesson,
+  NextResponse,
+  Overview,
   ProgressRecord,
   ProgressUpdate,
-  Quiz,
   SearchHit,
   SearchRequest,
   TutorRequest,
+  SessionStarted,
   TutorResponse,
   UserAggregate,
 } from "./types";
@@ -23,12 +28,18 @@ export interface Transport {
   review(termId: string, update: ProgressUpdate): Promise<ProgressRecord>;
   stats(): Promise<UserAggregate>;
 
-  // Decks & retention
-  listDecks(): Promise<DeckSummary[]>;
-  startDeck(domain: string, difficultyTier: string): Promise<{ created: number }>;
-  dueTerms(limit?: number): Promise<DueTerm[]>;
-  quiz(domain: string, difficultyTier: string, count?: number): Promise<Quiz>;
-  gradeQuiz(answers: { term_id: string; correct: boolean }[]): Promise<{ correct: number; total: number }>;
+  // Adaptive sessions (graded server-side)
+  startSession(): Promise<SessionStarted>;
+  nextExercise(sessionId: string): Promise<NextResponse>;
+  answer(sessionId: string, request: AnswerRequest): Promise<AnswerResult>;
+  explain(sessionId: string, exerciseId: string): Promise<{ explanation: string }>;
+  lesson(sessionId: string, exerciseId: string): Promise<Lesson>;
+  /** Base64 MP3 from Amazon Polly. */
+  pronounce(word: string): Promise<{ audio: string; format: string }>;
+  importWords(request: ImportRequest): Promise<ImportResult>;
+  overview(): Promise<Overview>;
+  /** Grows the learner's next difficulty band; callers don't await it. */
+  prefetch(): Promise<{ added: number }>;
 
   // Offline support (desktop only). Web omits these, so callers must feature-detect.
   queueReview?(termId: string, update: ProgressUpdate): Promise<number>;
@@ -67,27 +78,44 @@ export const tauriTransport: Transport = {
     return invoke<UserAggregate>("stats", {});
   },
 
-  async listDecks() {
+  async startSession() {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<DeckSummary[]>("list_decks", {});
+    return invoke<SessionStarted>("start_session", {});
   },
-  async startDeck(domain, difficultyTier) {
+  async nextExercise(sessionId) {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<{ created: number }>("start_deck", {
-      request: { domain, difficulty_tier: difficultyTier },
+    return invoke<NextResponse>("next_exercise", { sessionId });
+  },
+  async answer(sessionId, request) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<AnswerResult>("answer_exercise", { sessionId, request });
+  },
+  async explain(sessionId, exerciseId) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<{ explanation: string }>("explain_answer", {
+      sessionId,
+      request: { exercise_id: exerciseId },
     });
   },
-  async dueTerms(limit = 20) {
+  async lesson(sessionId, exerciseId) {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<DueTerm[]>("review_due", { limit });
+    return invoke<Lesson>("lesson", { sessionId, request: { exercise_id: exerciseId } });
   },
-  async quiz(domain, difficultyTier, count = 10) {
+  async pronounce(word) {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<Quiz>("quiz", { request: { domain, difficulty_tier: difficultyTier, count } });
+    return invoke<{ audio: string; format: string }>("pronounce", { word });
   },
-  async gradeQuiz(answers) {
+  async importWords(request) {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<{ correct: number; total: number }>("grade_quiz", { request: { answers } });
+    return invoke<ImportResult>("import_words", { request });
+  },
+  async overview() {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<Overview>("overview", {});
+  },
+  async prefetch() {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<{ added: number }>("prefetch_pool", {});
   },
 
   async queueReview(termId, update) {
@@ -124,23 +152,41 @@ export const webTransport: Transport = {
     return call<UserAggregate>("/v1/stats", "GET");
   },
 
-  async listDecks() {
-    return call<DeckSummary[]>("/v1/decks", "GET");
+  async startSession() {
+    return call<SessionStarted>("/v1/session", "POST");
   },
-  async startDeck(domain, difficultyTier) {
-    return call<{ created: number }>("/v1/deck/start", "POST", { domain, difficulty_tier: difficultyTier });
+  async nextExercise(sessionId) {
+    return call<NextResponse>(`/v1/session/${encodeURIComponent(sessionId)}/next`, "GET");
   },
-  async dueTerms(limit = 20) {
-    return call<DueTerm[]>(`/v1/review/due?limit=${limit}`, "GET");
+  async answer(sessionId, request) {
+    return call<AnswerResult>(`/v1/session/${encodeURIComponent(sessionId)}/answer`, "POST", request);
   },
-  async quiz(domain, difficultyTier, count = 10) {
-    return call<Quiz>(
-      `/v1/quiz?domain=${domain}&difficulty_tier=${difficultyTier}&count=${count}`,
+  async explain(sessionId, exerciseId) {
+    return call<{ explanation: string }>(
+      `/v1/session/${encodeURIComponent(sessionId)}/explain`,
+      "POST",
+      { exercise_id: exerciseId },
+    );
+  },
+  async lesson(sessionId, exerciseId) {
+    return call<Lesson>(`/v1/session/${encodeURIComponent(sessionId)}/lesson`, "POST", {
+      exercise_id: exerciseId,
+    });
+  },
+  async pronounce(word) {
+    return call<{ audio: string; format: string }>(
+      `/v1/pronounce?word=${encodeURIComponent(word)}`,
       "GET",
     );
   },
-  async gradeQuiz(answers) {
-    return call<{ correct: number; total: number }>("/v1/quiz/grade", "POST", { answers });
+  async importWords(request) {
+    return call<ImportResult>("/v1/import", "POST", request);
+  },
+  async overview() {
+    return call<Overview>("/v1/overview", "GET");
+  },
+  async prefetch() {
+    return call<{ added: number }>("/v1/pool/prefetch", "POST");
   },
 };
 

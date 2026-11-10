@@ -247,6 +247,56 @@ class VocabularyPool:
         )
         return report
 
+    def publish_headwords(
+        self, headwords: Sequence[str], *, source: str, base_difficulty: int = 60
+    ) -> tuple[list[TermRecord], list[str]]:
+        """Make specific words studyable now (words a learner imported from their own reading).
+
+        Returns ``(terms, rejected)``: already-published words are reused as they are; new ones
+        are enriched, embedded and published like a refill; words the model refuses (or refused
+        before) come back in ``rejected``.
+        """
+        unique = list({h.strip().lower(): h.strip() for h in headwords if h.strip()}.values())
+        ids = {h: term_id_for(h, self.domain) for h in unique}
+        existing = self._index.get_terms(list(ids.values()))
+        known = self._index.known_ids(list(ids.values()))
+        terms = [existing[ids[h]] for h in unique if ids[h] in existing]
+        rejected = [h for h in unique if ids[h] in known and ids[h] not in existing]
+        fresh = [h for h in unique if ids[h] not in known]
+        if not fresh:
+            return terms, rejected
+
+        frequencies = self._lookup_frequencies(fresh)
+        items = [
+            {
+                "headword": h,
+                "pos": "",
+                "source": source,
+                "cefr_level": "",
+                "difficulty": combine(base_difficulty, frequencies.get(h.lower())),
+            }
+            for h in fresh
+        ]
+        with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as pool:
+            results = list(pool.map(self._enrich_one, items))
+        ready: list[TermRecord] = []
+        for item, result in zip(items, results, strict=True):
+            headword = str(item["headword"])
+            if isinstance(result, Exception):
+                logger.warning(json_event("enrich_failed", term=headword, error=str(result)))
+                rejected.append(headword)
+            elif result.skip:
+                self._index.mark_skipped(ids[headword], headword, result.skip_reason)
+                rejected.append(headword)
+            else:
+                ready.append(build_term(item, result, domain=self.domain))
+        if ready:
+            embeddings = [self._bedrock.embed(t.to_vocabulary_term().embedding_text()) for t in ready]
+            self._store.put_terms([t.to_vocabulary_term() for t in ready], embeddings)
+            for term in ready:
+                self._index.put_term(term)
+        return terms + ready, rejected
+
     def _pick(self, lo: int, hi: int, count: int) -> list[dict[str, Any]]:
         """A random sample across the band (key order would always favour "a…" words).
 

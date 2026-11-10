@@ -17,6 +17,7 @@ class TutorMode(StrEnum):
     EXPLAIN = "explain"
     QUIZ = "quiz"
     COMPARE = "compare"
+    ANSWER = "answer"  # a quick question asked mid-session, shown inline under the exercise
 
 
 SYSTEM_PROMPT = """You are Lexicon, an expert English language and technical vocabulary tutor.
@@ -56,6 +57,10 @@ def build_prompt(query: str, hits: Sequence[SearchHit], *, mode: TutorMode = Tut
         ),
         TutorMode.COMPARE: (
             "Compare and contrast the vocabulary below, focusing on nuance and when to use each."
+        ),
+        TutorMode.ANSWER: (
+            "Answer the learner's question directly in at most 120 words of plain text: no "
+            "headings, no markdown, no CEFR labels. Use the vocabulary below only where it helps."
         ),
     }[mode]
     return (

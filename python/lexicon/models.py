@@ -122,6 +122,14 @@ class TermRecord(BaseModel):
     difficulty: int = Field(ge=0, le=100)
     source: str = ""
     created_at: datetime = Field(default_factory=utcnow)
+    # Teaching card (lesson.py), written the first time a learner misses the word.
+    ipa: str = ""
+    parts: str = ""  # word parts, e.g. "circum- (around) + locut- (speak)"
+    hook: str = ""  # a link to a common word or image that makes it stick
+    lesson_ready: bool = False
+    # Real sentences for cloze exercises (quotations.py, Wiktionary); fetched once.
+    quotations: list[str] = Field(default_factory=list)
+    quotations_checked: bool = False
 
     def to_vocabulary_term(self) -> VocabularyTerm:
         """Project onto the S3 Vectors record (filterable metadata + lean payload)."""
@@ -205,6 +213,13 @@ class ProgressRecord(BaseModel):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
+class LevelPoint(BaseModel):
+    """The learner's level at the end of a day's last session."""
+
+    date: str  # YYYY-MM-DD (UTC)
+    level: float
+
+
 class UserAggregate(BaseModel):
     """Rollup recomputed from ``ProgressRecord`` rows. Never hand-edited."""
 
@@ -220,6 +235,26 @@ class UserAggregate(BaseModel):
     # updated Elo-style by session.update_level.
     level: float | None = None
     level_updates: int = 0
+    level_history: list[LevelPoint] = Field(default_factory=list)  # newest last, ~1 per day
+
+    def record_level(self, *, today: str, keep: int = 180) -> None:
+        """Remember today's level (one point per day; the latest session wins)."""
+        if self.level is None:
+            return
+        if self.level_history and self.level_history[-1].date == today:
+            self.level_history[-1].level = self.level
+        else:
+            self.level_history.append(LevelPoint(date=today, level=self.level))
+        del self.level_history[:-keep]
+
+
+class QueuedWord(BaseModel):
+    """A word the learner imported from their own reading; studied before regular new words."""
+
+    term_id: str
+    context: str = ""  # the sentence it was met in
+    source: str = ""  # page title or "pasted text"
+    added_at: datetime = Field(default_factory=utcnow)
 
 
 class UserList(BaseModel):

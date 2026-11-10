@@ -7,6 +7,7 @@ Key design (single table ``lexicon``):
 | Progress (term)   | ``USER#<sub>``  | ``PROGRESS#<term_id>`` |
 | User list         | ``USER#<sub>``  | ``LIST#<list_id>``     |
 | Aggregate         | ``USER#<sub>``  | ``AGGREGATE``          |
+| Imported word     | ``USER#<sub>``  | ``QUEUE#<term_id>``    |
 
 Progress is per-term FSRS state; the aggregate is recomputed from it (see ``prompt.md`` Q-i).
 """
@@ -22,7 +23,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 from .config import get_settings
-from .models import ProgressRecord, UserAggregate, UserList
+from .models import ProgressRecord, QueuedWord, UserAggregate, UserList
 
 
 @lru_cache(maxsize=1)
@@ -115,6 +116,30 @@ class ProgressStore:
         aggregate = self.get_aggregate(user_id)
         aggregate.daily_goal = daily_goal
         return bookkeeping(self.list_progress(user_id), aggregate)
+
+    # --- imported words, studied before the regular new-word picks ---
+
+    def queue_words(self, user_id: str, entries: Sequence[QueuedWord]) -> None:
+        with self._table.batch_writer(overwrite_by_pkeys=["PK", "SK"]) as batch:
+            for entry in entries:
+                batch.put_item(
+                    Item={**entry.model_dump(mode="json"), "PK": _pk(user_id), "SK": f"QUEUE#{entry.term_id}"}
+                )
+
+    def list_queued(self, user_id: str) -> list[QueuedWord]:
+        response = self._table.query(
+            KeyConditionExpression=Key("PK").eq(_pk(user_id)) & Key("SK").begins_with("QUEUE#")
+        )
+        words = [
+            QueuedWord.model_validate({k: v for k, v in item.items() if k not in {"PK", "SK"}})
+            for item in response.get("Items", [])
+        ]
+        return sorted(words, key=lambda w: w.added_at)
+
+    def unqueue(self, user_id: str, term_ids: Sequence[str]) -> None:
+        with self._table.batch_writer() as batch:
+            for term_id in term_ids:
+                batch.delete_item(Key={"PK": _pk(user_id), "SK": f"QUEUE#{term_id}"})
 
     # --- user lists ---
 

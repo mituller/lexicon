@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
 
+import { ImportPanel } from "./components/ImportPanel";
+import { ProgressPanel } from "./components/ProgressPanel";
 import { SearchPanel } from "./components/SearchPanel";
 import { StudyPanel } from "./components/StudyPanel";
 import { useAuthStore } from "./stores/useAuthStore";
 import { useVocabStore } from "./stores/useVocabStore";
 
-type Tab = "study" | "search";
+type Tab = "study" | "import" | "progress" | "search";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "study", label: "Study" },
+  { id: "import", label: "Add words" },
+  { id: "progress", label: "Progress" },
+  { id: "search", label: "Search" },
+];
 
 export default function App() {
   const stats = useVocabStore((state) => state.stats);
@@ -29,7 +38,7 @@ export default function App() {
       <header className="app-header">
         <div>
           <h1>Lexicon</h1>
-          <p className="tagline">Learn a set, test yourself, keep the words.</p>
+          <p className="tagline">Words that get harder as you get better.</p>
         </div>
         {ready && (
           <div className="auth">
@@ -52,12 +61,16 @@ export default function App() {
         <>
           <div className="stats">
             <div className="stat">
+              <span className="stat-value">{stats?.level != null ? Math.round(stats.level) : "–"}</span>
+              <span className="stat-label">level</span>
+            </div>
+            <div className="stat">
               <span className="stat-value">{stats?.current_streak ?? 0}</span>
               <span className="stat-label">day streak</span>
             </div>
             <div className="stat">
               <span className="stat-value">{stats?.total_learned ?? 0}</span>
-              <span className="stat-label">terms learned</span>
+              <span className="stat-label">words studied</span>
             </div>
             <div className="stat">
               <span className="stat-value">{stats?.due_today ?? 0}</span>
@@ -70,23 +83,17 @@ export default function App() {
           )}
 
           <nav className="tabs">
-            <button
-              type="button"
-              className={tab === "study" ? "active" : ""}
-              onClick={() => setTab("study")}
-            >
-              Study
-            </button>
-            <button
-              type="button"
-              className={tab === "search" ? "active" : ""}
-              onClick={() => setTab("search")}
-            >
-              Search
-            </button>
+            {TABS.map(({ id, label }) => (
+              <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+                {label}
+              </button>
+            ))}
           </nav>
 
-          {tab === "study" ? <StudyPanel /> : <SearchPanel />}
+          {tab === "study" && <StudyPanel />}
+          {tab === "import" && <ImportPanel />}
+          {tab === "progress" && <ProgressPanel />}
+          {tab === "search" && <SearchPanel />}
         </>
       )}
     </main>
