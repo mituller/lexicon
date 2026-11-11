@@ -7,6 +7,7 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 const SERVICE: &str = "com.lexicon.app";
 static DIR: OnceLock<PathBuf> = OnceLock::new();
 

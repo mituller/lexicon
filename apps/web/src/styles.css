@@ -39,6 +39,17 @@ body {
   font-size: 2rem;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* The icon's 1024 canvas has a 100px transparent margin; pull the tile flush with the text. */
+.brand img {
+  margin: -4px 0 -4px -4px;
+}
+
 .tagline {
   color: var(--muted);
   margin-top: 0.25rem;

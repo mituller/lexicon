@@ -1,0 +1,44 @@
+name: windows build
+
+# Builds the Windows installer, proving the desktop app compiles and bundles on Windows (WebView2,
+# Credential Manager for the saved sign-in). Runs on pushes to main and on demand
+# (Actions -> windows build -> Run workflow). A release build takes ~10-15 minutes, and Windows
+# minutes count double on a private repo, so it doesn't run on every pull request.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    name: windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            apps/desktop/package-lock.json
+      # tauri build runs the web build first (beforeBuildCommand), so both need dependencies.
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm ci
+        working-directory: apps/desktop
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - run: npm run tauri -- build --bundles nsis
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lexicon-windows-installer
+          path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14

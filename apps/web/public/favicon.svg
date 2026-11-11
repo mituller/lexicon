@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Lexicon app icon. Source for `npx tauri icon app-icon.svg` (regenerates src-tauri/icons). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#232a42"/>
+      <stop offset="1" stop-color="#0d1019"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9e1ff"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a9bcff"/>
+      <stop offset="1" stop-color="#6f8cff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.68" cy="0.3" r="0.5">
+      <stop offset="0" stop-color="#7c9cff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#7c9cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- macOS icon grid: 824px rounded square centred in 1024 -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+
+  <!-- the mark, optically centred (the spark adds weight on the right) -->
+  <g transform="translate(-34 8)">
+  <!-- the L -->
+  <path d="M 378 300 L 378 716 L 676 716" fill="none" stroke="url(#mark)" stroke-width="124"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- the spark: a four-point star -->
+  <path transform="translate(652 352)"
+        d="M 0 -128 C 14 -40 40 -14 128 0 C 40 14 14 40 0 128 C -14 40 -40 14 -128 0 C -40 -14 -14 -40 0 -128 Z"
+        fill="url(#spark)"/>
+  </g>
+</svg>

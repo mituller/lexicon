@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import logoUrl from "./assets/logo.svg";
 import { ImportPanel } from "./components/ImportPanel";
 import { ProgressPanel } from "./components/ProgressPanel";
 import { SearchPanel } from "./components/SearchPanel";
@@ -37,7 +38,10 @@ export default function App() {
     <main className="app">
       <header className="app-header">
         <div>
-          <h1>Lexicon</h1>
+          <h1 className="brand">
+            <img src={logoUrl} alt="" width={40} height={40} />
+            Lexicon
+          </h1>
           <p className="tagline">Words that get harder as you get better.</p>
         </div>
         {ready && (
