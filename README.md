@@ -17,6 +17,10 @@ scheduler (FSRS) decides when each word comes back.
 It ships as a **desktop app** (React UI in a Tauri shell) backed by a **Python API on AWS
 Lambda**. A web/PWA build of the same UI is prepared but not hosted yet.
 
+<p align="center">
+  <img src="docs/images/home.png" alt="Lexicon's Study tab: level, day streak, words studied and reviews due, with a Start session button" width="720" />
+</p>
+
 ---
 
 ## Contents
@@ -45,6 +49,10 @@ The desktop app has four tabs:
 | **Search** | Semantic search over the vocabulary, plus a RAG tutor you can ask questions. |
 
 The header shows your **level** (a 0–100 estimate), day streak, words studied and reviews due.
+
+<p align="center">
+  <img src="docs/images/add-words.png" alt="The Add words tab: paste a passage or a link and Lexicon picks the words worth learning" width="640" />
+</p>
 
 ## How studying works
 
@@ -77,11 +85,27 @@ example sentences from Wiktionary** (credited on screen). Wrong options come fro
 Vectors neighbours, excluding synonyms and preferring the same part of speech, so they can't be
 ruled out on grammar alone.
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/study-pick-definition.png" alt="A new word: pick the definition of “denunciation” from four options" /></td>
+    <td width="50%"><img src="docs/images/study-fill-blank.png" alt="Fill the blank: “disparage” chosen correctly, with the full dictionary entry shown" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>A new word: pick the definition</em></td>
+    <td align="center"><em>Later: fill the blank, then the full entry</em></td>
+  </tr>
+</table>
+
 **Getting it wrong is a lesson.** A miss shows the full entry (definition, three examples,
 synonyms, commonly confused words, origin, where you met it for imported words), a **teaching
 card** (IPA, word parts, a memory hook; written once per word by Claude Sonnet and stored), and an
 optional "why was that wrong?" explanation. The word comes back three cards later as a different
 exercise until you get it right. Every entry has **pronunciation audio** (Amazon Polly).
+
+<p align="center">
+  <img src="docs/images/study-wrong-answer.png" alt="A wrong answer: the right definition is highlighted, followed by a teaching card with IPA, word parts and a memory hook, and the full entry" width="640" />
+  <br /><em>A miss: the right answer, a teaching card, and the full entry</em>
+</p>
 
 **Being lenient where it's fair.** A new word you get right on sight must be confirmed by typing
 before it counts as known. Typing a near-synonym instead of the word gets one ungraded retry;
