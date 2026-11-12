@@ -13,6 +13,8 @@ use base64::Engine;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
+use crate::config;
+
 const SCOPES: &str = "openid email profile";
 
 /// Registered on the Cognito app client (see infra/cdk/lexicon_stack.py).
@@ -31,12 +33,16 @@ pub struct Tokens {
 }
 
 impl AuthConfig {
-    /// Read Cognito settings from the environment (set by the CDK stack / shell profile).
+    /// Read Cognito settings: the runtime environment, else the values compiled in at build time.
     pub fn from_env() -> Result<Self, String> {
-        let domain = std::env::var("LEXICON_COGNITO_DOMAIN")
-            .map_err(|_| "LEXICON_COGNITO_DOMAIN is not set".to_string())?;
-        let client_id = std::env::var("LEXICON_COGNITO_CLIENT_ID")
-            .map_err(|_| "LEXICON_COGNITO_CLIENT_ID is not set".to_string())?;
+        let domain = config::required(
+            "LEXICON_COGNITO_DOMAIN",
+            option_env!("LEXICON_COGNITO_DOMAIN"),
+        )?;
+        let client_id = config::required(
+            "LEXICON_COGNITO_CLIENT_ID",
+            option_env!("LEXICON_COGNITO_CLIENT_ID"),
+        )?;
         // The redirect URI MUST exactly match a URL registered on the Cognito app client.
         // It is hardcoded on purpose: an env-var override that doesn't match the allow-list
         // produces Cognito's opaque "An error was encountered with the requested page"

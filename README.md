@@ -284,6 +284,26 @@ A second workflow, `.github/workflows/windows-build.yml`, builds the **Windows i
 count double on a private repo. The installer is unsigned, so Windows SmartScreen will warn on
 first launch (*More info → Run anyway*).
 
+A third workflow, `.github/workflows/macos-build.yml`, builds the **macOS app** on the same
+triggers: a universal (Apple Silicon + Intel) `.dmg` plus a zipped `Lexicon.app`, attached to the
+run for 14 days. macOS minutes count 10x on a private repo, so it doesn't run on pull requests
+either. The app is unsigned and not notarized; after installing, clear the quarantine flag once or
+macOS reports it as damaged: `xattr -cr /Applications/Lexicon.app`.
+
+Both desktop builds compile the API URL and Cognito settings into the app, because an app opened
+from Finder or the Start menu doesn't see shell exports. They come from the repository variables
+`LEXICON_API_BASE`, `LEXICON_COGNITO_DOMAIN` and `LEXICON_COGNITO_CLIENT_ID` (*Settings → Secrets
+and variables → Actions → Variables*), filled from the CDK stack outputs; the build fails if any
+is missing. None are secrets: the Cognito app client is public (PKCE, no client secret).
+
+To build locally instead, with the same three variables set (the values are in `python/.env`):
+
+```bash
+cd apps/desktop && npm run tauri -- build --bundles app,dmg
+```
+
+The output lands in `apps/desktop/src-tauri/target/release/bundle/` (`macos/` and `dmg/`).
+
 Run the CI checks locally with `make ci`. To check a deployed environment without changing anything:
 
 ```bash
@@ -337,7 +357,9 @@ npm run tauri dev
 ```
 
 The desktop shell reads its settings from the environment, not from a `.env` file. Export these
-before `npm run tauri dev` (the values are in `python/.env`):
+before `npm run tauri dev` or `tauri build` (the values are in `python/.env`). A build compiles
+them in, so the installed app works without them; a variable set at launch overrides the
+compiled value:
 
 ```bash
 export LEXICON_API_BASE='<ApiUrl>'

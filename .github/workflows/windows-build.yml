@@ -18,6 +18,21 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+      # Deployment settings compiled into the app (apps/desktop/src-tauri/src/config.rs), from the
+      # repository variables (Settings -> Secrets and variables -> Actions -> Variables), filled
+      # from the CDK stack outputs. None are secrets: the Cognito app client is public (PKCE).
+      - name: Check deployment settings
+        shell: bash
+        env:
+          LEXICON_API_BASE: ${{ vars.LEXICON_API_BASE }}
+          LEXICON_COGNITO_DOMAIN: ${{ vars.LEXICON_COGNITO_DOMAIN }}
+          LEXICON_COGNITO_CLIENT_ID: ${{ vars.LEXICON_COGNITO_CLIENT_ID }}
+        run: |
+          missing=0
+          for name in LEXICON_API_BASE LEXICON_COGNITO_DOMAIN LEXICON_COGNITO_CLIENT_ID; do
+            if [ -z "${!name}" ]; then echo "::error::Repository variable $name is not set"; missing=1; fi
+          done
+          exit $missing
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
@@ -36,6 +51,10 @@ jobs:
           workspaces: apps/desktop/src-tauri
       - run: npm run tauri -- build --bundles nsis
         working-directory: apps/desktop
+        env:
+          LEXICON_API_BASE: ${{ vars.LEXICON_API_BASE }}
+          LEXICON_COGNITO_DOMAIN: ${{ vars.LEXICON_COGNITO_DOMAIN }}
+          LEXICON_COGNITO_CLIENT_ID: ${{ vars.LEXICON_COGNITO_CLIENT_ID }}
       - uses: actions/upload-artifact@v4
         with:
           name: lexicon-windows-installer

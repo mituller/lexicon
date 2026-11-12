@@ -1,0 +1,73 @@
+name: macos build
+
+# Builds the macOS app and disk image as a universal binary (Apple Silicon + Intel), proving the
+# desktop app compiles and bundles on macOS (WKWebView, Keychain for the saved sign-in). Runs on
+# pushes to main and on demand (Actions -> macos build -> Run workflow). macOS minutes count 10x on
+# a private repo, so like the Windows build it doesn't run on every pull request.
+#
+# The build is unsigned and not notarized. After downloading, clear the quarantine flag before the
+# first launch, or macOS reports the app as damaged:  xattr -cr /Applications/Lexicon.app
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    name: macos app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Deployment settings compiled into the app (apps/desktop/src-tauri/src/config.rs), from the
+      # repository variables (Settings -> Secrets and variables -> Actions -> Variables), filled
+      # from the CDK stack outputs. None are secrets: the Cognito app client is public (PKCE).
+      - name: Check deployment settings
+        shell: bash
+        env:
+          LEXICON_API_BASE: ${{ vars.LEXICON_API_BASE }}
+          LEXICON_COGNITO_DOMAIN: ${{ vars.LEXICON_COGNITO_DOMAIN }}
+          LEXICON_COGNITO_CLIENT_ID: ${{ vars.LEXICON_COGNITO_CLIENT_ID }}
+        run: |
+          missing=0
+          for name in LEXICON_API_BASE LEXICON_COGNITO_DOMAIN LEXICON_COGNITO_CLIENT_ID; do
+            if [ -z "${!name}" ]; then echo "::error::Repository variable $name is not set"; missing=1; fi
+          done
+          exit $missing
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            apps/desktop/package-lock.json
+      # tauri build runs the web build first (beforeBuildCommand), so both need dependencies.
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm ci
+        working-directory: apps/desktop
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - run: npm run tauri -- build --target universal-apple-darwin --bundles app,dmg
+        working-directory: apps/desktop
+        env:
+          LEXICON_API_BASE: ${{ vars.LEXICON_API_BASE }}
+          LEXICON_COGNITO_DOMAIN: ${{ vars.LEXICON_COGNITO_DOMAIN }}
+          LEXICON_COGNITO_CLIENT_ID: ${{ vars.LEXICON_COGNITO_CLIENT_ID }}
+      # Zip the .app so its bundle structure and executable bits survive the artifact upload.
+      - run: ditto -c -k --keepParent Lexicon.app Lexicon.app.zip
+        working-directory: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lexicon-macos
+          path: |
+            apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/Lexicon.app.zip
+          if-no-files-found: error
+          retention-days: 14

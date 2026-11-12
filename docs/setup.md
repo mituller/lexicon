@@ -185,7 +185,9 @@ cp python/.env.example python/.env
 cp apps/web/.env.example apps/web/.env
 ```
 
-For the **desktop app**, export these before launching (or put them in your shell profile):
+For the **desktop app**, export these before `npm run tauri dev` or `npm run tauri build`. A
+build compiles them in, so the installed app (opened from Finder or the Start menu, which don't
+see shell exports) works without them; a variable set at launch overrides the compiled value:
 
 ```bash
 export LEXICON_API_BASE='<ApiUrl>'

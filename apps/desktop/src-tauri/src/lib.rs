@@ -5,6 +5,7 @@
 //! exposes typed `invoke()` commands. RAG, progress, and scheduling all live in Python.
 
 mod auth;
+mod config;
 mod secrets;
 mod store;
 
@@ -28,7 +29,8 @@ pub(crate) fn store_tokens(id_token: String, refresh_token: String) {
 }
 
 fn api_base() -> String {
-    std::env::var("LEXICON_API_BASE").unwrap_or_else(|_| "http://localhost:8000".to_string())
+    config::setting("LEXICON_API_BASE", option_env!("LEXICON_API_BASE"))
+        .unwrap_or_else(|| "http://localhost:8000".to_string())
 }
 
 fn client() -> Result<reqwest::Client, String> {
